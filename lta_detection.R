@@ -13,13 +13,9 @@
 
 
 ## OS reproduce
-# source("/nfs/research/icortes/belzen/src/TCGA_WGD_analysis/osteos.lta_detection.conf")
-# dataset_selection_label="osteos"
-# # or
-# flag_run_single_sample=T
-# target_sample="gel-100k_215001599-tumour-1_LP3000765-DNA_B09"
-# source("/nfs/research/icortes/belzen/src/lta_detection.R")
+#source('/nfs/research/icortes/belzen/src/TCGA_WGD_analysis/osteos.lta_detection.conf');dataset_selection_label='osteos';source('/nfs/research/icortes/belzen/src/lta_detection.R')
 
+#gliobblastoma lung breast => disruption of TSGs connected to oncogene amps. esoph 
 
 suppressPackageStartupMessages({
   library(GenomicRanges, quietly=TRUE)
@@ -62,6 +58,7 @@ if(!exists("chromothripsis_clusters_path")) {
   wgd_score_dir = "/Users/belzen/results/TCGA_WGD_analysis/v1/"
   cn_files_dir =  paste0(filesystem,"hmf/hmf_output_files/cn_files/")
   driver_files_dir=paste0(filesystem,"hmf/hmf_output_files/driver_files/")
+  driver_germline_files_dir=paste0(filesystem,"hmf/hmf_output_files/driver_germline_files/")
   
   chromothripsis_clusters_path = paste0(filesystem,"hmf/data_freeze_20240512.chromothripsis_clusters.tsv")
   cohort_path="~/data/metadata/TCGA.data_freeze_20240512.purity_table.tsv"
@@ -76,6 +73,8 @@ if(FALSE) {
   wgd_score_dir="~/results/osteos_gel-100k/"
   wgd_score_dir="~/results/osteos_all/"
   driver_files_dir="/Users/belzen/data/ebi/osteosarcoma_analysis/driver_files/"
+  driver_germline_files_dir=paste0("~/data/ebi/osteosarcoma_analysis/driver_germline_files/")
+  
   cn_files_dir="/Users/belzen/data/cn_files/"
   chromothripsis_clusters_path="/Users/belzen/data/ebi/osteosarcoma_analysis/shatterseek/chromothripsis_clusters.tsv"
   
@@ -124,6 +123,7 @@ gtf_path= paste0(resources_dir,"gencode.v38.annotation.gtf.gz")
 sv_wgd_score_path_template = paste0("${wgd_score_dir}/${patient_basename}.sv.filtered.wgd_score.tsv")
 cn_path_template = "${cn_files_dir}/${patient_basename}.purple.cnv.somatic.tsv"
 drivers_path_template = paste0("${driver_files_dir}/${patient_basename}.purple.driver.catalog.tsv")
+drivers_germline_path_template = paste0("${driver_germline_files_dir}/${patient_basename}.purple.driver.catalog.germline.tsv")
 
 #output
 gene_cn_sv_disruptions_path_template = paste0("${processed_output_dir}/${patient_basename}.gene_cn_sv_disruptions.tsv")
@@ -140,6 +140,7 @@ plot_dir=paste0(results_dir,"plots/")
 map_template_vars=c('${cn_files_dir}'=cn_files_dir,
                     '${wgd_score_dir}'=wgd_score_dir,
                     '${driver_files_dir}'=driver_files_dir,
+                    '${driver_germline_files_dir}'=driver_germline_files_dir,
                     "${plot_dir}"=plot_dir,
                     "${processed_output_dir}"=results_dir)
 
@@ -310,26 +311,29 @@ gene_properties_df = gene_properties_df %>% dplyr::mutate(gene_start = start, ge
 
 ##for osteos ----
 if(dataset_selection_label=="osteos") {
-sample_table = read.csv(sample_table_path,header=T) 
-sample_table$basename=sample_table$name
-sample_table = sample_table %>% filter(qc_final!="blacklist" & !is.na(basename))
-
-suptable1 = read.table(suptable1_path,sep = "\t", header=T) 
-suptable1 = suptable1 %>% dplyr::mutate(Region_Rcode=Region,
-                                        Region=str_replace(Region,"R","tumour-"),
-                                        Region=ifelse(Region==".",NA,Region))
-
-sample_table= sample_table %>% left_join(suptable1[,c("final_identifier","Region","LTA")],by=c("final_id"="final_identifier","Region")) 
-
-driver_masterfile = read.csv(driver_masterfile_path)
-sample_table = sample_table %>% mutate(selected_sample = names2 %in% driver_masterfile$names2)
-sample_table = sample_table %>% left_join(driver_masterfile %>% select(final_id,Region,CGR_17p,contains("TP53"),contains("OncoAmp")),by=c("final_id","Region")) 
-
-sample_table %>% filter(selected_sample) %>% nrow() ==  sample_table  %>% select(donor_id) %>% unique() %>% nrow()
-cohort = sample_table %>% filter(selected_sample)
-
-cohort$cohort_id=cohort$Cohort
-driver_masterfile = driver_masterfile %>% left_join(cohort[,c("names2","basename")]) 
+  sample_table = read.csv(sample_table_path,header=T) 
+  sample_table$basename=sample_table$name
+  sample_table = sample_table %>% filter(qc_final!="blacklist" & !is.na(basename))
+  
+  suptable1 = read.table(suptable1_path,sep = "\t", header=T) 
+  suptable1 = suptable1 %>% dplyr::mutate(Region_Rcode=Region,
+                                          Region=str_replace(Region,"R","tumour-"),
+                                          Region=ifelse(Region==".",NA,Region))
+  sample_table = sample_table %>% dplyr::mutate(Region_Rcode=str_replace(Region,"tumour-","R"),
+                                                Region_Rcode=str_replace(Region_Rcode,"metastasis-","R"),
+                                                Region_Rcode=ifelse(is.na(Region_Rcode),".",Region_Rcode))
+  
+  sample_table = sample_table %>% left_join(suptable1[,c("final_identifier","Region_Rcode","LTA")],by=c("final_id"="final_identifier","Region_Rcode"))
+  
+  driver_masterfile = read.csv(driver_masterfile_path)
+  sample_table = sample_table %>% mutate(selected_sample = names2 %in% driver_masterfile$names2)
+  sample_table = sample_table %>% left_join(driver_masterfile %>% select(final_id,Region,CGR_17p,contains("TP53"),contains("OncoAmp")),by=c("final_id","Region")) 
+  
+  sample_table %>% filter(selected_sample) %>% nrow() ==  sample_table  %>% select(donor_id) %>% unique() %>% nrow()
+  cohort = sample_table %>% filter(selected_sample)
+  
+  cohort$cohort_id=cohort$Cohort
+  driver_masterfile = driver_masterfile %>% left_join(cohort[,c("names2","basename")]) 
 
 }
 
@@ -375,8 +379,6 @@ if(grepl("TCGA",dataset_selection_label)) {
   chromothripsis_clusters=chromothripsis_clusters %>% merge(cohort[,c("cohort_id","basename")])
 }
 
-# Load CGRs ----
-
 #for both
 chromothripsis_clusters = chromothripsis_clusters %>% mutate(cluster_id=paste0("cluster_",basename,"_",chrom))
 chromothripsis_clusters = chromothripsis_clusters %>% mutate(multichromosomal=grepl("_",chrom_all))
@@ -395,6 +397,7 @@ q()
 
 sv_wgd_score = data.frame()
 drivers = data.frame()
+drivers_germline = data.frame()
 cohort_segments_df = data.frame()
 
 for(target_sample in cohort$basename) {
@@ -412,7 +415,10 @@ for(target_sample in cohort$basename) {
   }
   
   cn_path = stri_replace_all_fixed(cn_path_template,names(map_template_vars_patient), map_template_vars_patient,vectorize=F)
-  if(Sys.glob(cn_path) %>% length() == 0) { next() }
+  if(Sys.glob(cn_path) %>% length() == 0) { 
+    print(target_sample)
+    next() 
+  }
   segments_df = read.table(cn_path,sep="\t",header=T)
   segments_df = segments_df %>% dplyr::rename(seqnames=chromosome)
   segments_df$basename=target_sample
@@ -425,9 +431,17 @@ for(target_sample in cohort$basename) {
   if(nrow(drivers_sample)==0) {next()}
   drivers_sample$basename=target_sample
   drivers=rbind(drivers,drivers_sample)
+ 
+  drivers_germline_path = stri_replace_all_fixed(drivers_germline_path_template,names(map_template_vars_patient), map_template_vars_patient,vectorize=F)
+  if(Sys.glob(drivers_germline_path) %>% length() == 0) { next() }
+  drivers_germline_sample = read.table(drivers_germline_path,sep="\t",header=T)
+  if(nrow(drivers_germline_sample)==0) {next()}
+  drivers_germline_sample$basename=target_sample
+  drivers_germline=rbind(drivers_germline,drivers_germline_sample)
   
 }
 
+cohort %>% filter(basename %in% cohort_segments_df$basename)
 
 svs_df = sv_wgd_score
 svs_df = svs_df %>% mutate(sv_id=paste0(basename,"_",bp_name),partner_sv_id=paste0(basename,"_",partner))
@@ -438,6 +452,7 @@ cohort_segments_df = cohort_segments_df %>% mutate(cn_seg_id=paste0(basename,"_"
 cn_seg_gr = GRanges(cohort_segments_df)
 names(cn_seg_gr) = cohort_segments_df$cn_seg_id
 
+drivers = rbind(drivers,drivers_germline) %>% unique()
 drivers = drivers %>% dplyr::mutate(gene_name=gene) %>% left_join(gene_properties_df %>% select(gene_name,gene_id,gene_start,gene_end)) 
 drivers = drivers %>% dplyr::mutate(chr_arm = ifelse(grepl("p",chromosomeBand),paste0(chromosome,"p"),paste0(chromosome,"q")))
 drivers = drivers %>% left_join(chr_arms_df %>% select(chr_arm,chr_arm_start,chr_arm_end))
@@ -447,7 +462,7 @@ drivers = drivers %>% mutate(sample_gene = paste0(basename,"_",gene_name))
 driver_summary = drivers %>% group_by(basename,gene_name) %>% 
   summarize(hmf_biallelic=any(biallelic=="true"),likelihoodMethod=toString(likelihoodMethod),hmf_driver=toString(driver)) %>% ungroup() %>% as.data.frame()
 
-    #
+
     
 # TSG disruption ----
 
@@ -529,7 +544,10 @@ gene_region_sv_bp_overlap = gene_region_sv_bp_overlap %>% left_join(gene_propert
 #check if gene is knocked out by sv
 multiplicity_gene_region_sv.min=0.9
 biallelic_sv_bp_tumor_af.min=0.9
+sv_bp_tumor_af.min=0.5
+
 loh_minorCN.max=0.5
+
 #TODO: if not empty ...
 if(exists("gene_sv_bp_max_af")) {
   gene_cn_sv_disruptions = gene_cn %>% ungroup() %>%
@@ -545,17 +563,43 @@ if(exists("gene_sv_bp_max_af")) {
 gene_cn_sv_disruptions = gene_cn_sv_disruptions %>%
   left_join(driver_summary) %>%
    dplyr::mutate(
- # # gene_sv_bp = ifelse(!is.na(max_multiplicity), max_multiplicity >= multiplicity_gene_region_sv.min, F),
+     hmf_biallelic =ifelse(is.na(hmf_biallelic),F,T),
+  gene_sv_bp= ifelse(!is.na(max_tumor_af), (max_tumor_af >= sv_bp_tumor_af.min | (max_multiplicity/weighted_CN) >= sv_bp_tumor_af.min), F),
   gene_loh=weighted_minorCN<=loh_minorCN.max,
   gene_sv_bp_biallelic = ifelse(!is.na(max_tumor_af), gene_loh & (max_tumor_af >= biallelic_sv_bp_tumor_af.min | (max_multiplicity/weighted_CN) >= biallelic_sv_bp_tumor_af.min), F),
   gene_region_cgr = sample_gene %in% gene_region_cgr_overlap$sample_gene,
  # gene_region_sv_bp = sample_gene %in% filter(gene_region_sv_bp_overlap,PURPLE_JCN>=multiplicity_gene_region_sv.min)$sample_gene,
   gene_region_ctx = sample_gene %in% filter(gene_region_sv_bp_overlap,svtype=="CTX"&PURPLE_JCN>=multiplicity_gene_region_sv.min)$sample_gene) %>%
   dplyr::mutate(
-    gene_knockout_sv_component = (gene_sv_bp_biallelic | (hmf_biallelic & (gene_loh & (gene_region_cgr | gene_region_ctx))))
+    gene_knockout_sv_component = gene_loh & (hmf_biallelic | (!is.na(hmf_driver) & gene_sv_bp) | gene_sv_bp_biallelic),
+    #gene_knockout_sv_component_strict = (gene_sv_bp_biallelic | (hmf_biallelic & (gene_loh & (gene_region_cgr | gene_region_ctx))))
+    gene_knockout_sv_component_strict = gene_knockout_sv_component & (gene_region_cgr | gene_region_ctx | gene_sv_bp)
   ) %>%
   left_join(map_genes_chr_arms) #for coordinates
     
+
+if(FALSE) {
+  #gene_cn_sv_disruptions_bk=gene_cn_sv_disruptions
+  missed_disruptions = gene_cn_sv_disruptions %>% filter(basename %in% 
+                                                           filter(assess_lta,LTA=="Yes" &  lta==F & has_tsg_disruption==F)$basename)
+  
+  missed_disruptions %>% as.data.frame()
+  
+  
+  
+  missed_disruptions %>% filter(!basename %in% gene_region_sv_bp_overlap$basename)
+  missed_disruptions %>% filter(!basename %in% filter(gene_region_sv_bp_overlap,svtype=="CTX")$basename)
+  
+  gene_region_sv_bp_overlap %>% filter(svtype=="CTX" & basename %in% missed_disruptions$basename)
+  
+  missed_disruptions
+  gene_cn_sv_disruptions %>% filter(basename %in% missed_disruptions$basename) %>% filter(gene_knockout_sv_component==T)
+  gene_cn_sv_disruptions %>% filter(basename %in% missed_disruptions$basename) %>% filter(gene_knockout_sv_component==F)
+  
+  missed_disruptions = gene_cn_sv_disruptions %>% filter(gene_knockout_sv_component==F) %>% merge(cohort[,c("basename","LTA","final_id","TP53status","TP53")]) %>% 
+    filter(LTA=="Yes")
+  
+}
 
 # Regions of instability / oncogene amp ----
 # for OS didnt require oncogene but CGR "region of instability"  
@@ -659,7 +703,7 @@ selected_connected_tsg_regions = svs_connecting_tsg_instability %>%
   dplyr::rename_with(.fn=function(x){paste0("cgr_",x)},.cols=c("multichromosomal","chrom_all","classification")) %>%
   left_join(tsg_region %>% 
               select(region_id,gene_name,weighted_CN,weighted_minorCN,max_tumor_af,max_multiplicity,contains("hmf"),
-                     gene_loh,gene_sv_bp_biallelic,gene_region_cgr,gene_region_ctx,gene_knockout_sv_component) %>% unique() %>%
+                     gene_loh,gene_sv_bp_biallelic,gene_region_cgr,gene_region_ctx,gene_knockout_sv_component,gene_knockout_sv_component_strict) %>% unique() %>%
               dplyr::rename_with(.fn=function(x){paste0("tsg_",x)}),
             by=c("tsg_region_id"))  %>%
   as.data.frame()
@@ -674,17 +718,21 @@ if(FALSE) {
 }
 
 # Call LTA ----
+#multichromosomal if CGR is multichromosomal but also if tsg connected to two different clusters
+
+count_connected_tsg_regions = selected_connected_tsg_regions %>% group_by(basename,tsg_region_id) %>% 
+  summarize(instability_region_cnt = length(unique(cluster_id)))
 
 cohort_call_lta = cohort  %>% 
-  select(cohort_id,basename,contains("final_id"),contains("TP53"),contains("LTA")) %>%
+  select(cohort_id,basename,contains("final_id"),contains("TP53"),contains("LTA"),contains("subtype_short")) %>%
   mutate(has_tsg_disruption = basename %in% tsg_region$basename,
+         has_tsg_disruption_strict = basename %in% filter(tsg_region,gene_knockout_sv_component_strict)$basename,
          has_instability_region = basename %in% instability_region$basename,
          lta = basename %in% selected_connected_tsg_regions$basename,
-         lta_multichrom = basename %in% filter(selected_connected_tsg_regions,cgr_multichromosomal)$basename,
+         lta_multichrom = basename %in% c(filter(selected_connected_tsg_regions,cgr_multichromosomal)$basename,filter(count_connected_tsg_regions,instability_region_cnt>1)$basename),
          lta_onco = basename %in% filter(selected_connected_tsg_regions,onco_amp_in_chr_arm)$basename,
          lta_onco_multichrom = basename %in% filter(selected_connected_tsg_regions,onco_amp_in_chr_arm&cgr_multichromosomal)$basename,
   )
-
 
 #Export -----
 
@@ -718,7 +766,6 @@ for(target_sample in filter(cohort_call_lta,lta)$basename) {
   if(sample$lta) {
     plot_path_label=paste0(plot_path_label,".onco_multichrom=",sample$lta_onco_multichrom,".multichrom=",sample$lta_multichrom,".onco=",sample$lta_onco)
   }
-    
   
   map_template_vars_patient=c(map_template_vars,'${patient_basename}'=target_sample)
   
@@ -735,6 +782,8 @@ reconplot_path = stri_replace_all_fixed(reconplot_path_template,names(map_templa
 
 plot_chrom = str_count(selected_instability_region$chrom_all,"_") %>% max() + 1
 plot_width = ifelse(plot_chrom<4, 35, 35+(2.5*(plot_chrom-3)))
+
+if(length(Sys.glob(reconplot_path))==1) {next()}
 
 pdf(reconplot_path, width = plot_width/2.2, height = 8/2.2,pointsize = 8)
 
