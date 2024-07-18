@@ -11,15 +11,15 @@
 # SINGULARITYENV_R_MAX_VSIZE=80Gb
 # singularity exec --bind /nfs/research/icortes/ /nfs/research/icortes/belzen/src/structural_variation_202405_amd.sif R -e "source('/nfs/research/icortes/belzen/src/TCGA_WGD_analysis/lta_detection.conf');flag_run_single_sample=T;target_sample='TCGA-SARC_TCGA-PC-A5DM_TCGA-PC-A5DM-01A-11D-A813-36';source('/nfs/research/icortes/belzen/src/lta_detection.R')"
 
-
 ## OS reproduce
 #source('/nfs/research/icortes/belzen/src/TCGA_WGD_analysis/osteos.lta_detection.conf');dataset_selection_label='osteos';source('/nfs/research/icortes/belzen/src/lta_detection.R')
 
-#gliobblastoma lung breast => disruption of TSGs connected to oncogene amps. esoph 
 
 suppressPackageStartupMessages({
-  library(GenomicRanges, quietly=TRUE)
-  library(rtracklayer, quietly=TRUE)
+  library(GenomicRanges)
+  library(VariantAnnotation)
+  library(StructuralVariantAnnotation)
+  library(rtracklayer)
   library(tidyverse, quietly=TRUE)
   library(stringr, quietly=TRUE)
   library(stringi)
@@ -30,6 +30,8 @@ suppressPackageStartupMessages({
 chrom_order=c(paste0("chr",1:22),"chrX")
 options(expressions= 500000)
 max_svs_display=1000
+sv_id_col="bp_name"
+
 
 if(!exists("chromothripsis_clusters_path")) {
   #local
@@ -41,39 +43,16 @@ if(!exists("chromothripsis_clusters_path")) {
   # results_dir="/nfs/research/icortes/belzen/results/lta_detection/"
   # metadata_dir="/nfs/research/icortes/belzen/data/metadata/"
   # 
-  if(FALSE){
-    #tcga
-    #/nfs/research/icortes/belzen/src/TCGA_WGD_analysis/lta_detection.conf
-    dataset_selection_label="TCGA-SARC"
-    
-  flag_run_single_sample=T
-  target_sample="TCGA-SARC_TCGA-PC-A5DM_TCGA-PC-A5DM-01A-11D-A813-36"
-  if(flag_run_single_sample && exists("target_sample")) {
-    dataset_selection_label=target_sample
-  }
   
-  #todo make into config local later
-  filesystem="/Users/belzen/data/TCGA/"
+  dataset_selection_label="osteos"
 
-  wgd_score_dir = "/Users/belzen/results/TCGA_WGD_analysis/v1/"
-  cn_files_dir =  paste0(filesystem,"hmf/hmf_output_files/cn_files/")
-  driver_files_dir=paste0(filesystem,"hmf/hmf_output_files/driver_files/")
-  driver_germline_files_dir=paste0(filesystem,"hmf/hmf_output_files/driver_germline_files/")
-  
-  chromothripsis_clusters_path = paste0(filesystem,"hmf/data_freeze_20240512.chromothripsis_clusters.tsv")
-  cohort_path="~/data/metadata/TCGA.data_freeze_20240512.purity_table.tsv"
-  
-  # chromothripsis_clusters_path = "/nfs/research/icortes/DATA/TCGA_WGS/hmf/data_freeze_20240512/shatterseek/chromothripsis_clusters.tsv"
-  # cohort_path="/nfs/research/icortes/DATA/TCGA_WGS/hmf/data_freeze_20240512/purity_table.tsv"
-  # 
-  }
-
-if(FALSE) {
+if(dataset_selection_label=="osteos") {
   #osteos
   wgd_score_dir="~/results/osteos_gel-100k/"
   wgd_score_dir="~/results/osteos_all/"
   driver_files_dir="/Users/belzen/data/ebi/osteosarcoma_analysis/driver_files/"
   driver_germline_files_dir=paste0("~/data/ebi/osteosarcoma_analysis/driver_germline_files/")
+  sv_filtered_files_dir=paste0("~/data/sv_filtered_files/")
   
   cn_files_dir="/Users/belzen/data/cn_files/"
   chromothripsis_clusters_path="/Users/belzen/data/ebi/osteosarcoma_analysis/shatterseek/chromothripsis_clusters.tsv"
@@ -98,14 +77,41 @@ if(FALSE) {
   #todo proper sbatch launcer for  sbatch --mem=50Gb --time=35:00:00 run_wgd_score.sh 
   
   
+}  else{
+  #tcga
+  #/nfs/research/icortes/belzen/src/TCGA_WGD_analysis/lta_detection.conf
+  dataset_selection_label="TCGA-SARC"
+  
+  flag_run_single_sample=T
+  target_sample="TCGA-SARC_TCGA-PC-A5DM_TCGA-PC-A5DM-01A-11D-A813-36"
+  if(flag_run_single_sample && exists("target_sample")) {
+    dataset_selection_label=target_sample
+  }
+  
+  #todo make into config local later
+  filesystem="/Users/belzen/data/TCGA/"
+  
+  wgd_score_dir = "/Users/belzen/results/TCGA_WGD_analysis/v1/"
+  cn_files_dir =  paste0(filesystem,"hmf/hmf_output_files/cn_files/")
+  driver_files_dir=paste0(filesystem,"hmf/hmf_output_files/driver_files/")
+  driver_germline_files_dir=paste0(filesystem,"hmf/hmf_output_files/driver_germline_files/")
+  sv_filtered_files_dir =paste0(filesystem,"hmf/hmf_output_files/sv_filtered_files/")
+  
+  chromothripsis_clusters_path = paste0(filesystem,"hmf/data_freeze_20240512.chromothripsis_clusters.tsv")
+  cohort_path="~/data/metadata/TCGA.data_freeze_20240512.purity_table.tsv"
+  
+  # chromothripsis_clusters_path = "/nfs/research/icortes/DATA/TCGA_WGS/hmf/data_freeze_20240512/shatterseek/chromothripsis_clusters.tsv"
+  # cohort_path="/nfs/research/icortes/DATA/TCGA_WGS/hmf/data_freeze_20240512/purity_table.tsv"
+  # 
 }
+  
 }
 
 if(!exists("flag_run_single_sample")) { flag_run_single_sample=F }
 
 if(!exists("dataset_selection_label")) {
   print("Warning, no dataset_selection_label, setting default")
-  dataset_selection_label="TCGA-SARC"
+  dataset_selection_label="osteos"
 }
 
 print(paste0("Running: ",dataset_selection_label))
@@ -120,7 +126,8 @@ gtf_path= paste0(resources_dir,"gencode.v38.annotation.gtf.gz")
 
 #input
 
-sv_wgd_score_path_template = paste0("${wgd_score_dir}/${patient_basename}.sv.filtered.wgd_score.tsv")
+#sv_wgd_score_path_template = paste0("${wgd_score_dir}/${patient_basename}.sv.filtered.wgd_score.tsv")
+sv_filtered_path_template = "${sv_filtered_files_dir}/${patient_basename}.purple.sv.filtered.vcf.gz"
 cn_path_template = "${cn_files_dir}/${patient_basename}.purple.cnv.somatic.tsv"
 drivers_path_template = paste0("${driver_files_dir}/${patient_basename}.purple.driver.catalog.tsv")
 drivers_germline_path_template = paste0("${driver_germline_files_dir}/${patient_basename}.purple.driver.catalog.germline.tsv")
@@ -140,7 +147,8 @@ reconplot_path_template = paste0("${plot_dir}/${patient_basename}.${cgr_id}.reco
 plot_dir=paste0(results_dir,"plots/")
 
 map_template_vars=c('${cn_files_dir}'=cn_files_dir,
-                    '${wgd_score_dir}'=wgd_score_dir,
+                    #'${wgd_score_dir}'=wgd_score_dir,
+                    '${sv_filtered_files_dir}'=sv_filtered_files_dir,
                     '${driver_files_dir}'=driver_files_dir,
                     '${driver_germline_files_dir}'=driver_germline_files_dir,
                     "${plot_dir}"=plot_dir,
@@ -234,6 +242,27 @@ get_reciprocal_overlap_pairs = function(set1,set2,reciprocal_overlap=0.5,svtype_
   return(overlap_pairs_df)
 }
 
+get_svtype <- function(gr) {
+  #Function copied from GRIDSS example code
+  # CTX if seq names are the same
+  ## return as complex if unpartnered
+  
+  return_gr = gr
+  unpartnered_gr=gr[!gr$partner %in% names(gr)]
+  gr = gr[gr$partner %in% names(gr)]
+  
+  svtype = ifelse(seqnames(gr) != seqnames(gr[gr$partner]), "CTX", # inter-chromosomosal
+                  ifelse(gr$insLen >= abs(gr$svLen) * 0.7, "INS", # TODO: improve classification of complex events
+                         ifelse(strand(gr) == strand(gr[gr$partner]), "INV",
+                                ifelse(xor(start(gr) < start(gr[gr$partner]), strand(gr) == "-"), "DEL",
+                                       "DUP"))))
+  
+  if(length(unpartnered_gr)>0){
+    return_gr[names(unpartnered_gr)]$svtype="complex"
+  }
+  return_gr[names(gr)]$svtype=svtype
+  return(  return_gr$svtype)
+}
 
 rbind_no_colmatch = function (df1,df2)  {
   if(nrow(df1)==0) {
@@ -297,7 +326,7 @@ get_reciprocal_overlap_pairs_start_end = function(svs,properties,reciprocal_over
 chromosome_bands_df = read.table(chromosome_bands_path,header=T,sep="\t",comment.char = "")
 chromosome_bands_df = chromosome_bands_df %>% dplyr::rename("seqnames"="X.chrom","start"="chromStart","end"="chromEnd","cytoband"="name") 
 chromosome_bands_df$cytoband = paste0(chromosome_bands_df$seqnames,chromosome_bands_df$cytoband)
-chr_arms = get_chr_arms(chromosome_bands_df,split_giestain = F)
+chr_arms = get_chr_arms(chromosome_bands_df,autosomes = chrom_order,split_giestain = F)
 chr_arms = GRanges(chr_arms)
 names(chr_arms) = chr_arms$chr_arm
 chr_arms_df = as.data.frame(chr_arms)
@@ -306,6 +335,7 @@ chr_arms_df = chr_arms_df %>% dplyr::mutate(chr_arm_start=start,chr_arm_end=end)
 gtf <- rtracklayer::import(gtf_path)
 gene_properties = gtf[gtf$type=="gene"]
 names(gene_properties) = gene_properties$gene_id
+gene_properties = gene_properties[gene_properties@seqnames %in% chrom_order]
 gene_properties_df = as.data.frame(gene_properties)
 #gene_properties_df$gene_coord = paste0(gene_properties_df$seqnames,":",gene_properties_df$start,"-",gene_properties_df$end)
 gene_properties_df = gene_properties_df %>% dplyr::mutate(gene_start = start, gene_end=end)
@@ -346,12 +376,16 @@ cohort=read.table(cohort_path,header = T)
 cohort$basename=cohort$sample_id
 cohort = cohort %>% rowwise() %>% mutate(cohort_id=unlist(strsplit(sample_id, "_"))[1])
 
-cohort = cohort %>% filter(purity>=0.3 & qc=="PASS" )
+cohort = cohort %>% filter(qc=="PASS" )
+cohort = cohort %>% filter(!((snv_n_chromosomes <= 15 | sv_n_chromosomes <= 15) & (snv_n < 100 & sv_n < 10)))
 
 if(flag_run_single_sample==F & exists("dataset_selection_label")) {
   cohort = cohort %>% filter(cohort_id==dataset_selection_label)
   print(paste0("RUNNING: ",dataset_selection_label))
 }
+print("Number of samples")
+print(cohort %>% nrow())
+
 }
 
 if(flag_run_single_sample && exists("target_sample")) {
@@ -398,7 +432,7 @@ q()
 
 # Load svs, cns, drivers ----
 
-sv_wgd_score = data.frame()
+svs_df = data.frame()
 drivers = data.frame()
 drivers_germline = data.frame()
 cohort_segments_df = data.frame()
@@ -406,15 +440,46 @@ cohort_segments_df = data.frame()
 for(target_sample in cohort$basename) {
   map_template_vars_patient=c(map_template_vars,'${patient_basename}'=target_sample)
   
-  sv_wgd_score_path = stri_replace_all_fixed(sv_wgd_score_path_template,names(map_template_vars_patient), map_template_vars_patient,vectorize=F)
-
-  if(length(Sys.glob(sv_wgd_score_path))==1){
-    sv_wgd_score_sample = read.table(sv_wgd_score_path,sep = "\t",header = T)
-    sv_wgd_score_sample$basename=target_sample
-    sv_wgd_score = rbind(sv_wgd_score,sv_wgd_score_sample)  
+  #sv_wgd_score_path = stri_replace_all_fixed(sv_wgd_score_path_template,names(map_template_vars_patient), map_template_vars_patient,vectorize=F)
+  sv_filtered_path = stri_replace_all_fixed(sv_filtered_path_template,names(map_template_vars_patient), map_template_vars_patient,vectorize=F)
+  
+  if(length(Sys.glob(sv_filtered_path))==1){
+    gridss_vcf = readVcf(sv_filtered_path, "hg38")
+    svs_gr = breakpointRanges(gridss_vcf,nominalPosition=T,inferMissingBreakends=F)
+    elementMetadata(svs_gr)["svtype"] = get_svtype(svs_gr)
+    svs_sample = as.data.frame(svs_gr)
+    svs_sample = svs_sample %>% mutate(!!sym(sv_id_col) := rownames(.)) 
+    
+    #important to use nominal position and remove unpartnered breakends
+    
+    ## Annotate SVs with EBI pipeline output 
+    info_vcf = as.data.frame(info(gridss_vcf)) %>% mutate(!!sym(sv_id_col) := rownames(.)) 
+    join_cols = names(info_vcf)[!names(info_vcf) %in% names(svs_sample)]
+    
+    selected_metadata_cols = join_cols[grepl("PURPLE",join_cols)]
+    
+    svs_sample = svs_sample %>% left_join(info_vcf[,unique(c(sv_id_col,selected_metadata_cols))],by=sv_id_col)
+    
+    
+    #get first item of purple AF , CN and CN change = current breakpoint
+    #otherwise also cannot save
+    #to indicate the difference use lowercase letters
+    
+    svs_sample = svs_sample %>% rowwise() %>% dplyr::mutate(
+      purple_af_start=ifelse(length(PURPLE_AF)>0,PURPLE_AF[[1]] %>% as.character(),NA),
+      purple_cn_start=PURPLE_CN[[1]] %>% as.character(),
+      purple_cn_change_start=PURPLE_CN_CHANGE[[1]] %>% as.character(),
+      purple_af_end=ifelse(length(PURPLE_AF)>0,PURPLE_AF[2][] %>% as.character(),NA),
+      purple_cn_end=PURPLE_CN[2][] %>% as.character(),
+      purple_cn_change_end=PURPLE_CN_CHANGE[2][] %>% as.character()) %>% as.data.frame()
+    #dplyr::select(-PURPLE_AF,-PURPLE_CN,-PURPLE_CN_CHANGE)
+    
+    # svs_sample = read.table(sv_wgd_score_path,sep = "\t",header = T)
+     svs_sample$basename=target_sample
+     svs_df = rbind(svs_df,svs_sample)  
     
   } else {
-    print(target_sample)
+    print(paste0("Missing SVs:",target_sample))
   }
   
   cn_path = stri_replace_all_fixed(cn_path_template,names(map_template_vars_patient), map_template_vars_patient,vectorize=F)
@@ -444,9 +509,6 @@ for(target_sample in cohort$basename) {
   
 }
 
-cohort %>% filter(basename %in% cohort_segments_df$basename)
-
-svs_df = sv_wgd_score
 svs_df = svs_df %>% mutate(sv_id=paste0(basename,"_",bp_name),partner_sv_id=paste0(basename,"_",partner),sv_event=paste0(basename,"_",event))
 svs_gr=GRanges(svs_df)
 names(svs_gr)=svs_df$sv_id
@@ -457,6 +519,7 @@ names(cn_seg_gr) = cohort_segments_df$cn_seg_id
 
 drivers = rbind(drivers,drivers_germline) %>% unique()
 drivers = drivers %>% filter(driverLikelihood>=0.5) 
+drivers = drivers %>% filter(chromosome != "chrY")
 drivers = drivers %>% dplyr::mutate(gene_name=gene) %>% left_join(gene_properties_df %>% select(gene_name,gene_id,gene_start,gene_end)) 
 drivers = drivers %>% dplyr::mutate(chr_arm = ifelse(grepl("p",chromosomeBand),paste0(chromosome,"p"),paste0(chromosome,"q")))
 drivers = drivers %>% left_join(chr_arms_df %>% select(chr_arm,chr_arm_start,chr_arm_end))
@@ -599,25 +662,39 @@ cn_tsg_chr_arm_terminal = region_tsg_chr_arm_terminal_cn_overlap %>%
   group_by(basename,gene_name,sample_gene,region_width,gene_id) %>% 
   filter(minorAlleleCopyNumber<=loh_minorCN.max) %>% 
   summarize(seg_loh = sum(overlap_set2_set1*cn_seg_width)) %>%
-  dplyr::mutate(tsg_chr_arm_terminal_frac_loh = seg_loh / region_width) %>% as.data.frame() %>%
-  dplyr::select(basename,gene_name,sample_gene,tsg_chr_arm_terminal_frac_loh)
+  dplyr::mutate(chr_arm_terminal_frac_loh = seg_loh / region_width) %>% as.data.frame() %>%
+  dplyr::select(basename,gene_name,sample_gene,chr_arm_terminal_frac_loh)
 
 chr_arms_cn_overlap = get_reciprocal_overlap_pairs(chr_arms,cn_seg_gr,reciprocal_overlap = 0,svtype_matching = F,ignore_strand = T)
 chr_arms_cn_overlap = chr_arms_cn_overlap  %>% dplyr::rename(chr_arm=set1,cn_seg_id=set2) 
 chr_arms_cn_overlap = chr_arms_cn_overlap %>% 
   left_join(cohort_segments_df %>%   dplyr::mutate(cn_seg_width=end-start) %>%
-              dplyr::select(cn_seg_id,basename,copyNumber,minorAlleleCopyNumber,cn_seg_width)) %>%
+              dplyr::select(seqnames,cn_seg_id,basename,copyNumber,minorAlleleCopyNumber,cn_seg_width)) %>%
   left_join(chr_arms_df %>% dplyr::mutate(chr_arm_width=chr_arm_end-chr_arm_start)%>% dplyr::select(chr_arm,chr_arm_width))
 
 cn_chr_arm = chr_arms_cn_overlap %>% 
-  group_by(basename,chr_arm,chr_arm_width) %>% 
   filter(minorAlleleCopyNumber<=loh_minorCN.max) %>% 
+  group_by(basename,chr_arm,chr_arm_width) %>% 
   summarize(seg_loh = sum(overlap_set2_set1*cn_seg_width)) %>%
   dplyr::mutate(chr_arm_frac_loh = seg_loh / chr_arm_width) %>% as.data.frame() %>%
   dplyr::select(-seg_loh,-chr_arm_width)
 
+chromosomes_df = chr_arms_df %>%  group_by(seqnames) %>% summarize(start = min(start),end=max(end),.groups="drop")
+chromosomes_df$chrom_width=chromosomes_df$end-chromosomes_df$start
 
-#TODO: if not empty ...
+cn_full_chrom = chr_arms_cn_overlap %>% left_join(chromosomes_df %>% select(seqnames,chrom_width)) %>% 
+  filter(minorAlleleCopyNumber<=loh_minorCN.max) %>% 
+  group_by(basename,seqnames,chrom_width) %>% 
+  summarize(seg_loh = sum(overlap_set2_set1*cn_seg_width)) %>%
+  dplyr::mutate(chrom_frac_loh = seg_loh / chrom_width) %>% as.data.frame() %>%
+  dplyr::select(-seg_loh,-chrom_width)
+
+cn_chr_arm_amp = chr_arms_cn_overlap %>% 
+  filter(copyNumber>=9) %>% 
+  group_by(basename,chr_arm) %>% 
+  summarize(seg_amp9_kbp = sum(overlap_set2_set1*cn_seg_width)/1e3) %>% as.data.frame() 
+
+
 if(exists("gene_sv_bp_max_af")) {
   gene_cn_sv_disruptions = gene_cn %>% ungroup() %>%
     left_join(gene_sv_bp_max_af) %>% 
@@ -653,6 +730,8 @@ gene_cn_sv_disruptions = gene_cn_sv_disruptions %>%
   left_join(map_genes_chr_arms) %>% 
   left_join(cn_tsg_chr_arm_terminal,by=c("basename", "gene_name", "sample_gene")) %>% 
   left_join(cn_chr_arm,by=c("basename", "chr_arm")) %>%
+  left_join(cn_full_chrom,by=c("basename", "seqnames")) %>%
+  left_join(cn_chr_arm_amp,by=c("basename", "chr_arm")) %>%
   dplyr::mutate(
     gene_knockout =  hmf_biallelic | (!is.na(hmf_driver) & gene_sv_bp) | gene_sv_bp_biallelic | weighted_CN<=loh_minorCN.max,
     gene_knockout_sv_component = gene_loh & gene_knockout,
@@ -847,279 +926,132 @@ if(FALSE) {
 # Call LTA ----
 if(FALSE) {
   #check idnetical tp53
-new_lta = selected_connected_tsg_regions %>% 
-  filter(tsg_gene_knockout_sv_component) %>% 
-  #filter(cgr_multichromosomal_excl_tsg_region | tsg_to_multiple_chrom | onco_amp_in_chr_arm) %>%
-  filter(tsg_gene_name=="TP53") 
-new_lta %>% select(basename) %>% unique() %>% nrow()
-new_lta %>% filter(onco_amp_in_chr_arm ) %>% filter(!basename %in% filter(cohort_call_lta_prev,lta)$basename)
-
-#cohort_call_lta_prev =cohort_call_lta
-#look into this for cdkn2a disruption by cgr yet no knockout sv component? nope still 2cn 
-#gene_cn_sv_disruptions %>% filter(basename=="kidsfirst_PT_X8TWRDEH-tumour-1_H_VC-GMKF-40-PASTRH-08A-01D" & gene_name=="CDKN2A") %>% as.data.frame()
-
-cohort_call_lta_prev %>% filter(lta
-#                                & (lta_onco | lta_multichrom)
-                                ) %>%
-  filter(!basename %in% new_lta$basename) 
+  new_lta = selected_connected_tsg_regions %>% 
+    filter(tsg_gene_knockout_sv_component) %>% 
+    #filter(cgr_multichromosomal_excl_tsg_region | tsg_to_multiple_chrom | onco_amp_in_chr_arm) %>%
+    filter(tsg_gene_name=="TP53") 
+  new_lta %>% select(basename) %>% unique() %>% nrow()
+  new_lta %>% filter(onco_amp_in_chr_arm ) %>% filter(!basename %in% filter(cohort_call_lta_prev,lta)$basename)
+  
+  #cohort_call_lta_prev =cohort_call_lta
+  #look into this for cdkn2a disruption by cgr yet no knockout sv component? nope still 2cn 
+  #gene_cn_sv_disruptions %>% filter(basename=="kidsfirst_PT_X8TWRDEH-tumour-1_H_VC-GMKF-40-PASTRH-08A-01D" & gene_name=="CDKN2A") %>% as.data.frame()
+  
+  cohort_call_lta_prev %>% filter(lta
+                                  #                                & (lta_onco | lta_multichrom)
+  ) %>%
+    filter(!basename %in% new_lta$basename) 
 }
 if(FALSE){
   #prev
-cohort_call_lta = cohort  %>% 
-  select(cohort_id,basename,contains("final_id"),contains("TP53"),contains("LTA"),contains("subtype_short")) %>%
-  mutate(has_tsg_disruption = basename %in% filter(tsg_region,gene_knockout_sv_component)$basename,
-         has_tsg_disruption_strict = basename %in% filter(tsg_region,gene_knockout_sv_component_strict)$basename,
-         has_instability_region = basename %in% instability_region$basename,
-         lta_any = basename %in% selected_connected_tsg_regions$basename,
-         lta = basename %in% filter(selected_connected_tsg_regions,tsg_gene_knockout_sv_component)$basename,
-         lta_multichrom = basename %in% c(filter(selected_connected_tsg_regions,tsg_gene_knockout_sv_component&(tsg_to_multiple_chrom|cgr_multichromosomal_excl_tsg_region))$basename),#,filter(count_connected_tsg_regions,tsg_gene_knockout_sv_component&instability_region_cnt>1)$basename),
-         lta_onco = basename %in% filter(selected_connected_tsg_regions,onco_amp_in_chr_arm&tsg_gene_knockout_sv_component)$basename,
-         lta_onco_multichrom = basename %in% filter(selected_connected_tsg_regions,tsg_gene_knockout_sv_component&onco_amp_in_chr_arm&(tsg_to_multiple_chrom|cgr_multichromosomal_excl_tsg_region))$basename,
-  )
+  cohort_call_lta = cohort  %>% 
+    select(cohort_id,basename,contains("final_id"),contains("TP53"),contains("LTA"),contains("subtype_short")) %>%
+    mutate(has_tsg_disruption = basename %in% filter(tsg_region,gene_knockout_sv_component)$basename,
+           has_tsg_disruption_strict = basename %in% filter(tsg_region,gene_knockout_sv_component_strict)$basename,
+           has_instability_region = basename %in% instability_region$basename,
+           lta_any = basename %in% selected_connected_tsg_regions$basename,
+           lta = basename %in% filter(selected_connected_tsg_regions,tsg_gene_knockout_sv_component)$basename,
+           lta_multichrom = basename %in% c(filter(selected_connected_tsg_regions,tsg_gene_knockout_sv_component&(tsg_to_multiple_chrom|cgr_multichromosomal_excl_tsg_region))$basename),#,filter(count_connected_tsg_regions,tsg_gene_knockout_sv_component&instability_region_cnt>1)$basename),
+           lta_onco = basename %in% filter(selected_connected_tsg_regions,onco_amp_in_chr_arm&tsg_gene_knockout_sv_component)$basename,
+           lta_onco_multichrom = basename %in% filter(selected_connected_tsg_regions,tsg_gene_knockout_sv_component&onco_amp_in_chr_arm&(tsg_to_multiple_chrom|cgr_multichromosomal_excl_tsg_region))$basename,
+    )
 }
 
-call_lta = gene_cn_sv_disruptions %>% 
+gene_cn_sv_disruptions.call_lta = gene_cn_sv_disruptions %>% 
   dplyr::mutate(tsg_chrom=seqnames,tsg_gene_name=gene_name) %>% 
   select(basename,tsg_gene_name,tsg_chrom) %>% 
   left_join(selected_connected_tsg_regions) %>% 
-  group_by(basename,tsg_gene_name,tsg_chrom) %>% 
+  group_by(basename,tsg_gene_name,tsg_chrom,tsg_region_id) %>% 
   summarize( 
-    lta_any = any(!is.na(region_id)),
-    lta = any(!is.na(tsg_gene_knockout_sv_component) & tsg_gene_knockout_sv_component), #the knockout sv component is from connected table 
+    lta_any = any(!is.na(region_id)), #instability region from the selected table
+    lta = any(!is.na(tsg_gene_knockout_sv_component) & tsg_gene_knockout_sv_component), #the knockout sv component is from connected table, so know that lta is detected
     lta_multichrom =  any( ((!is.na(tsg_to_multiple_chrom) & tsg_to_multiple_chrom) | (!is.na(cgr_multichromosomal_excl_tsg_region) & cgr_multichromosomal_excl_tsg_region) ) &
                              !is.na(tsg_gene_knockout_sv_component) & tsg_gene_knockout_sv_component),
     lta_onco =  any(!is.na(onco_amp_in_chr_arm) & onco_amp_in_chr_arm & !is.na(tsg_gene_knockout_sv_component) & tsg_gene_knockout_sv_component),
     lta_onco_multichrom =  any( !is.na(onco_amp_in_chr_arm) & onco_amp_in_chr_arm &  
-                             ((!is.na(tsg_to_multiple_chrom) & tsg_to_multiple_chrom) | (!is.na(cgr_multichromosomal_excl_tsg_region) & cgr_multichromosomal_excl_tsg_region) ) &
-                             !is.na(tsg_gene_knockout_sv_component) & tsg_gene_knockout_sv_component)
-    
+                                  ((!is.na(tsg_to_multiple_chrom) & tsg_to_multiple_chrom) | (!is.na(cgr_multichromosomal_excl_tsg_region) & cgr_multichromosomal_excl_tsg_region) ) &
+                                  !is.na(tsg_gene_knockout_sv_component) & tsg_gene_knockout_sv_component),
+    .groups="drop"
   )
+
+#knockout of gene regardless of lta
+gene_cn_sv_disruptions.call_lta = gene_cn_sv_disruptions.call_lta %>% 
+  left_join(gene_cn_sv_disruptions %>% select(basename,gene_name,weighted_CN,weighted_minorCN,max_tumor_af,max_multiplicity,contains("hmf"),
+                                              gene_loh,gene_sv_bp_biallelic,gene_region_cgr,gene_region_ctx,
+                                              chr_arm_terminal_frac_loh,chr_arm_frac_loh,chrom_frac_loh,seg_amp9_kbp,gene_knockout,
+                                              gene_knockout_sv_component,gene_knockout_sv_component_strict) %>% unique() %>%
+              dplyr::rename_with(.cols=-basename,.fn=function(x){paste0("tsg_",x)}) )
+
+gene_cn_sv_disruptions.call_lta = gene_cn_sv_disruptions.call_lta %>% dplyr::mutate(connected_to_tp53_tsg_region = 
+                                                                                      tsg_region_id %in% filter(selected_connected_tsg_regions,region_id %in% filter(selected_connected_tsg_regions,tsg_gene_name=="TP53")$region_id)$tsg_region_id)
+
+gene_cn_sv_disruptions.call_lta = gene_cn_sv_disruptions.call_lta %>% mutate( across(.cols=c(contains("knockout"),contains("lta"),connected_to_tp53_tsg_region), ~replace_na(.x, F)) )
+
 
 cohort_call_lta = cohort  %>% 
   select(cohort_id,basename,contains("final_id"),contains("TP53"),contains("LTA"),contains("subtype_short")) %>%
-  left_join(call_lta %>% filter(tsg_gene_name=="TP53")) 
+  left_join(gene_cn_sv_disruptions.call_lta %>% filter(tsg_gene_name=="TP53") %>% select(basename,tsg_gene_name,contains("lta"),contains("knockout")))
 
-         
-call_lta_annot = call_lta %>% 
-  left_join(gene_cn_sv_disruptions %>% select(basename,gene_name,weighted_CN,weighted_minorCN,max_tumor_af,max_multiplicity,contains("hmf"),
-                                              gene_loh,gene_sv_bp_biallelic,gene_region_cgr,gene_region_ctx,gene_knockout_sv_component,gene_knockout_sv_component_strict) %>% unique() %>%
-              dplyr::rename_with(.cols=-basename,.fn=function(x){paste0("tsg_",x)}) )          
+cohort_call_lta = cohort_call_lta %>% mutate( across(.cols=c(contains("knockout"),contains("lta")), ~replace_na(.x, F)) )
 
 
+#knockout here is part of lta 
 oncogene_amp_annot = instability_region_oncogene_amp_long %>% select(basename,cluster_id,region_id,chr_arm,gene_name,maxCopyNumber) %>%
-  left_join(selected_connected_tsg_regions %>% 
-              select(region_id,cgr_chrom_all,cgr_classification,tsg_region_id,tsg_gene_name,tsg_chr_arm,tsg_gene_knockout_sv_component,tsg_gene_knockout_sv_component_strict,tsg_to_multiple_chrom,cgr_multichromosomal_excl_tsg_region)) %>%
-  left_join(call_lta,by=c("basename","tsg_gene_name"))
+   left_join(selected_connected_tsg_regions %>% 
+               select(region_id,cgr_chrom_all,cgr_classification,tsg_region_id,tsg_gene_name,tsg_chr_arm,tsg_gene_knockout_sv_component,tsg_gene_knockout_sv_component_strict,tsg_to_multiple_chrom,cgr_multichromosomal_excl_tsg_region),relationship = "many-to-many") %>%
+   left_join(gene_cn_sv_disruptions.call_lta %>% select(basename,tsg_gene_name,contains("lta"),connected_to_tp53_tsg_region),by=c("basename","tsg_gene_name"))
 
 oncogene_amp_annot = oncogene_amp_annot %>% mutate(
-  across(.cols=contains("lta"), ~replace_na(.x, F))
+  across(.cols=c(contains("knockout"),contains("lta"),connected_to_tp53_tsg_region), ~replace_na(.x, F))
 )
 
 
+selected_connected_tsg_regions_annot = selected_connected_tsg_regions %>% left_join(gene_cn_sv_disruptions.call_lta %>% select(basename,tsg_region_id,contains("lta"),connected_to_tp53_tsg_region))
+
+#look at instability regions connected to multiple tsg disrupted regions indicating same event
+#selected_connected_tsg_regions_annot %>% filter(lta) %>% group_by(region_id) %>% summarize(toString(unique(tsg_region_id)))
+
+
+#gene disruptions but then ltas only
+call_lta_annot = gene_cn_sv_disruptions.call_lta %>% filter(lta_any)
+
 #Export -----
 
-write.table(gene_cn_sv_disruptions %>% left_join(call_lta %>% dplyr::rename(gene_name=tsg_gene_name)),gene_cn_sv_disruptions_path,sep = "\t",row.names = F,col.names = T)
+write.table(gene_cn_sv_disruptions.call_lta,gene_cn_sv_disruptions_path,sep = "\t",row.names = F,col.names = T)
 write.table(instability_region,clusters_instability_region_path,sep = "\t",row.names = F,col.names = T)
 write.table(svs_connecting_tsg_instability,svs_connecting_tsg_instability_path,sep = "\t",row.names = F,col.names = T)
-write.table(selected_connected_tsg_regions %>% left_join(call_lta),connected_regions_tsg_instability_path,sep = "\t",row.names = F,col.names = T)
+write.table(selected_connected_tsg_regions_annot,connected_regions_tsg_instability_path,sep = "\t",row.names = F,col.names = T)
 write.table(cohort_call_lta,cohort_call_lta_path,sep = "\t",row.names = F,col.names = T)
 write.table(call_lta_annot,call_lta_annot_path,sep = "\t",row.names = F,col.names = T)
 write.table(oncogene_amp_annot,oncogene_amp_annot_path,sep = "\t",row.names = F,col.names = T)
 
+# if(dataset_selection_label=="osteos") {
+#   q()
+# }
+
+# Reconplots for multi TSG ----
+library(ReConPlot)
+
 if(dataset_selection_label=="osteos") {
-  q()
+  plot_cases = call_lta_annot %>% filter(lta_any)
+  
+} else {
+  plot_cases = call_lta_annot %>% filter(lta_onco)
 }
 
-# Reconplots / tp53 only----
-library(ReConPlot)
+plot_cases = plot_cases %>% arrange(-tsg_gene_knockout_sv_component_strict) 
+#highest prio for plotting
+#plot_cases = call_lta_annot %>% filter(lta&tsg_gene_name!="TP53"&tsg_gene_knockout_sv_component_strict==T&connected_to_tp53_tsg_region==F)
 
-# target_sample="TCGA-SARC_TCGA-DX-A8BK_TCGA-DX-A8BK-01A-11D-A811-36"
-# target_sample = "TCGA-SARC_TCGA-DX-A6YR_TCGA-DX-A6YR-01A-33D-A811-36"
-# target_sample="TCGA-SARC_TCGA-DX-AB2Q_TCGA-DX-AB2Q-01A-11D-A812-36"
-# target_sample="TCGA-SARC_TCGA-PC-A5DM_TCGA-PC-A5DM-01A-11D-A813-36"
+#plot_cases = call_lta_annot %>% filter(lta&tsg_gene_name!="TP53"&tsg_chrom_frac_loh>0.9&tsg_gene_knockout_sv_component_strict==F&connected_to_tp53_tsg_region==F)
+#plot from perspective of tsg_region_id 
 
-#target_sample="gel-100k_215002085-tumour-6_LP3001080-DNA_A10"
-#for(target_sample in unique(selected_connected_tsg_regions$basename))
-
-
-
-#plot_path_label=paste0("lta_multichrom")
-#for(target_sample in filter(cohort_call_lta,LTA=="No" & lta_multichrom)$basename) {
-#how to viz missed??
-
-plot_cases = cohort_call_lta %>% filter((lta_multichrom | lta_onco))
-#plot_cases = cohort_call_lta %>% filter(LTA=="No" & (lta_multichrom | lta_onco))
-
-#point of no return
-selected_connected_tsg_regions = selected_connected_tsg_regions %>% filter(tsg_gene_name == "TP53")
-
-for(target_sample in plot_cases$basename) {
-  sample=filter(cohort_call_lta,basename==target_sample)
-  plot_path_label=paste0("lta.TP53")
-  if("LTA" %in% names(sample)) {
-    plot_path_label=paste0(plot_path_label,".truth_set=",sample$LTA)
-  }
-  plot_path_label=paste0(plot_path_label,".detected=",sample$lta)
-  if(sample$lta) {
-    plot_path_label=paste0(plot_path_label,".onco_multichrom=",sample$lta_onco_multichrom,".multichrom=",sample$lta_multichrom,".onco=",sample$lta_onco)
-  }
-  
-  map_template_vars_patient=c(map_template_vars,'${patient_basename}'=target_sample)
-  
-  #chr arm region 
-  #include connections found
-  #all svs of cgrs of the multichrom constructs 
-  
-  selected_instability_region = instability_region %>% filter(region_id %in% filter(selected_connected_tsg_regions,basename==target_sample)$region_id)
-  selected_connecting_svs = svs_connecting_tsg_instability %>% filter(region_id %in% selected_instability_region$region_id) %>%
-    left_join(selected_instability_region %>% select(region_id,chrom_all))
-  
-  map_template_vars_cgr = c(map_template_vars_patient,'${cgr_id}'=plot_path_label)
-  reconplot_path = stri_replace_all_fixed(reconplot_path_template,names(map_template_vars_cgr), map_template_vars_cgr,vectorize=F)
-  
-  plot_chrom = str_count(selected_instability_region$chrom_all,"_") %>% max() + 1
-  plot_width = ifelse(plot_chrom<4, 35, 35+(2.5*(plot_chrom-3)))
-  
-  if(length(Sys.glob(reconplot_path))==1) {next()}
-  
-  pdf(reconplot_path, width = plot_width/2.2, height = 8/2.2,pointsize = 8)
-  
-  
-  #plot the entire thing and plot per multichrom group (chrom_all)
-  multichrom_group_lst = c("all",selected_instability_region$chrom_all %>% unique())
-  multichrom_group="chr3_chr5_chr7_chr8_chr9_chr11_chr13_chr19_chrX"
-  multichrom_group="all"
-  for(multichrom_group in multichrom_group_lst) {
-    if(multichrom_group=="all" ) { 
-      plot_selected_instability_region = selected_instability_region 
-    } else {
-      plot_selected_instability_region = selected_instability_region %>% filter(chrom_all==multichrom_group)
-    }
-    
-    #expand to multichrom 
-    selected_cgrs = chromothripsis_clusters %>% merge(plot_selected_instability_region[,c("basename","chrom_all")])
-    selected_cgrs = selected_cgrs %>% left_join(map_clusters_chr_arms[,c("cluster_id","chr_arm")])
-    
-    map_svs_target_cgrs = get_reciprocal_overlap_pairs(svs_gr[svs_gr$basename == target_sample],chromothripsis_clusters_gr[chromothripsis_clusters_gr$cluster_id %in% selected_cgrs$cluster_id,],reciprocal_overlap = 0,svtype_matching = F,ignore_strand = T)
-    map_svs_target_cgrs = map_svs_target_cgrs %>% dplyr::rename(sv_id=set1,cluster_id=set2,svtype=set1_svtype) %>% select(-to,-from,-overlap_set1_set2,-overlap_set2_set1)
-    
-    plot_selected_connecting_svs = selected_connecting_svs %>% filter(chrom_all %in% plot_selected_instability_region$chrom_all)
-    
-    plot_svs = c(plot_selected_connecting_svs$sv_id,
-                 plot_selected_connecting_svs$partner_sv_id,
-                 map_svs_target_cgrs$sv_id) %>% unique()
-    
-    plot_gene_lst=c("TP53")
-    plot_genes = instability_region_oncogene_amp_long %>% merge(plot_selected_instability_region[,c("basename","chr_arm")])
-    if(nrow(plot_genes)>0) {
-      plot_gene_lst = c(plot_gene_lst,plot_genes$gene_name) 
-    }
-    
-    sv_data = svs_df %>% 
-      filter(sv_id %in% plot_svs) %>% 
-      select(basename,bp_name,start,seqnames,strand) %>% 
-      dplyr::rename(chr1=seqnames,pos1=start) %>%
-      left_join(svs_df %>% select(basename,partner,start,seqnames,strand) %>% 
-                  dplyr::rename(chr2=seqnames,pos2=start),by=c("bp_name"="partner","basename")) %>%
-      dplyr::mutate(strands=paste0(strand.x,strand.y)) %>% select(-strand.x,-strand.y) %>%
-      select(chr1,pos1,chr2,pos2,strands) %>% as.data.frame()
-    
-    sv_data = sv_data %>% filter(chr1 %in% chrom_order & chr2 %in% chrom_order)
-    
-    if(nrow(sv_data) > max_svs_display) {
-      print(paste0("Too many SVs to display, skipping plot", nrow(sv_data)))
-      next()
-    }
-    
-    cn_data = cohort_segments_df %>% 
-      dplyr::rename(chr=seqnames) %>% 
-      filter(basename==target_sample & chr %in% sv_data$chr1) %>%
-      mutate(copyNumber=round(copyNumber),minorAlleleCopyNumber=round(minorAlleleCopyNumber)) %>%
-      select(chr,start,end,copyNumber,minorAlleleCopyNumber) %>% as.data.frame()
-    
-    plot_region_arms = c(plot_selected_connecting_svs$chr_arm,plot_selected_connecting_svs$tsg_chr_arm,selected_cgrs$chr_arm)
-    cgrs_chr_arm_coord = chr_arms_df %>%
-      filter(chr_arm %in% plot_region_arms) %>%
-      dplyr::mutate(chr1=seqnames,chr=seqnames) %>%
-      group_by(chr1,chr) %>% summarize(start=min(start),end=max(end)) %>% ungroup() %>% as.data.frame()
-    
-    #otherwise error
-    cgrs_chr_arm_coord$chr = as.character(cgrs_chr_arm_coord$chr)
-    cgrs_chr_arm_coord$chr1 = as.character(cgrs_chr_arm_coord$chr1)
-    
-    #request from jose full chromosomes
-    full_chrom = cgrs_chr_arm_coord 
-    full_chrom$start=1
-    full_chrom$end=500e6
-    
-    p = ReConPlot(genes = plot_gene_lst,
-                  sv_data,
-                  cn_data,
-                  chr_selection=full_chrom,
-                  legend_SV_types=T,
-                  pos_SVtype_description=1000000,
-                  scale_separation_SV_type_labels=1/23,
-                  title=paste0(multichrom_group," ",target_sample),
-                  max.cn = 12,
-                  label_interchr_SV = TRUE,
-    )
-    print(p)
-    
-    plot_region_instability_only = c(plot_selected_connecting_svs$chr_arm,plot_selected_connecting_svs$tsg_chr_arm,plot_selected_instability_region$chr_arm) %>% unique()
-    
-    plot_region_instability_only = chr_arms_df %>%
-      filter(chr_arm %in% plot_region_instability_only) %>% arrange(seqnames) %>%
-      select(seqnames,start,end) %>% dplyr::mutate(chr1=as.character(seqnames),chr=chr1,start=1,end=500e6) %>% as.data.frame() %>% unique()
-    
-    if(full_chrom %>% filter(!chr %in% plot_region_instability_only$chr) %>% nrow() == 0 ) {next()}
-    p = ReConPlot(genes = plot_gene_lst,
-                  sv_data %>% filter(chr1 %in% plot_region_instability_only$seqnames),
-                  cn_data %>% filter(chr %in% plot_region_instability_only$seqnames),
-                  chr_selection=plot_region_instability_only,
-                  legend_SV_types=T,
-                  pos_SVtype_description=1000000,
-                  scale_separation_SV_type_labels=1/23,
-                  title=paste0(multichrom_group," ",target_sample," - plot chrom instability only"),
-                  max.cn = 12,
-                  label_interchr_SV = TRUE,
-    )
-    print(p)
-    
-  }
-  
-  dev.off()
-  
-}
-
-
-if(FALSE) {
-  ##TODO make for multi tsg
-# Reconplots ----
-library(ReConPlot)
-
-# target_sample="TCGA-SARC_TCGA-DX-A8BK_TCGA-DX-A8BK-01A-11D-A811-36"
-# target_sample = "TCGA-SARC_TCGA-DX-A6YR_TCGA-DX-A6YR-01A-33D-A811-36"
-# target_sample="TCGA-SARC_TCGA-DX-AB2Q_TCGA-DX-AB2Q-01A-11D-A812-36"
-# target_sample="TCGA-SARC_TCGA-PC-A5DM_TCGA-PC-A5DM-01A-11D-A813-36"
-
-#target_sample="gel-100k_215002085-tumour-6_LP3001080-DNA_A10"
-#for(target_sample in unique(selected_connected_tsg_regions$basename))
-
-
-
-#plot_path_label=paste0("lta_multichrom")
-#for(target_sample in filter(cohort_call_lta,LTA=="No" & lta_multichrom)$basename) {
-  #how to viz missed??
-#plot_cases = cohort_call_lta %>% filter(LTA=="Yes")
-#plot_cases = call_lta %>% filter(lta)
-#plot_cases = cohort_call_lta %>% filter(LTA=="No" & (lta_multichrom | lta_onco))
-#plot from perspective of tsg_region_id
-
-target_tsg_region_id="gel-100k_215000612-tumour-1_LP3000296-DNA_E12_CDKN2A"
+target_tsg_region_id="gel-100k_215000400-tumour-1_LP3000428-DNA_A01_LSAMP"
+#target_tsg_region_id="gel-100k_215000612-tumour-1_LP3000296-DNA_E12_CDKN2A"
+target_tsg_region_id="pcawg_DO52642_f83fc777-5416-c3e9-e040-11ac0d482c8e_TP53"
 for(target_tsg_region_id in plot_cases$tsg_region_id) {
-  #sample=filter(cohort_call_lta,basename==target_sample)
-  sample=filter(plot_cases,tsg_region_id==target_tsg_region_id)
-  
+  sample=filter(call_lta_annot,tsg_region_id==target_tsg_region_id)
+  target_sample=sample$basename
   plot_path_label=paste0("lta")
   if("LTA" %in% names(sample)) {
     plot_path_label=paste0(plot_path_label,".truth_set=",sample$LTA)
@@ -1128,6 +1060,12 @@ for(target_tsg_region_id in plot_cases$tsg_region_id) {
   if(sample$lta) {
     plot_path_label=paste0(plot_path_label,".onco_multichrom=",sample$lta_onco_multichrom,".multichrom=",sample$lta_multichrom,".onco=",sample$lta_onco)
   }
+  if("tsg_gene_knockout_sv_component_strict" %in% names(sample)) {
+    plot_path_label=paste0(plot_path_label,".tsg_gene_knockout_sv_component_strict=",sample$tsg_gene_knockout_sv_component_strict)
+  }
+  # if("connected_to_tp53_tsg_region" %in% names(sample)) {
+  #   plot_path_label=paste0(plot_path_label,".connected_to_tp53_tsg_region=",sample$connected_to_tp53_tsg_region)
+  # }
   
   map_template_vars_patient=c(map_template_vars,'${patient_basename}'=target_tsg_region_id)
   
@@ -1155,7 +1093,6 @@ pdf(reconplot_path, width = plot_width/2.2, height = 8/2.2,pointsize = 8)
 
 #plot the entire thing and plot per multichrom group (chrom_all)
 multichrom_group_lst = c("all",selected_instability_region$chrom_all %>% unique())
-multichrom_group="chr3_chr5_chr7_chr8_chr9_chr11_chr13_chr19_chrX"
 multichrom_group="all"
 for(multichrom_group in multichrom_group_lst) {
   if(multichrom_group=="all" ) { 
@@ -1178,7 +1115,7 @@ plot_svs = c(plot_selected_connecting_svs$sv_id,
              map_svs_target_cgrs$sv_id) %>% unique()
 
 #plot_gene_lst=c("TP53")
-plot_gene_lst=filter(selected_connected_tsg_regions,tsg_region_id==target_tsg_region_id)$tsg_gene_name %>% unique()
+plot_gene_lst=lta_tsg_disruption_lst
 
 plot_genes = instability_region_oncogene_amp_long %>% merge(plot_selected_instability_region[,c("basename","chr_arm")])
 if(nrow(plot_genes)>0) {
@@ -1194,12 +1131,15 @@ sv_data = svs_df %>%
   dplyr::mutate(strands=paste0(strand.x,strand.y)) %>% select(-strand.x,-strand.y) %>%
   select(chr1,pos1,chr2,pos2,strands) %>% as.data.frame()
 
-sv_data = sv_data %>% filter(chr1 %in% chrom_order & chr2 %in% chrom_order)
+  sv_data = sv_data %>% filter(chr1 %in% chrom_order & chr2 %in% chrom_order)
 
-  if(nrow(sv_data) > max_svs_display) {
-    print(paste0("Too many SVs to display, skipping plot", nrow(sv_data)))
-    next()
-  }
+  plot_region_instability_only = c(plot_selected_connecting_svs$chr_arm,plot_selected_connecting_svs$tsg_chr_arm,plot_selected_instability_region$chr_arm) %>% unique()
+  
+  plot_region_instability_only = chr_arms_df %>%
+    filter(chr_arm %in% plot_region_instability_only) %>% arrange(seqnames) %>%
+    select(seqnames,start,end) %>% dplyr::mutate(chr1=as.character(seqnames),chr=chr1,start=1,end=500e6) %>% as.data.frame() %>% unique()
+  sv_data_instability_only = sv_data %>% filter(chr1 %in% plot_region_instability_only$seqnames)
+  
   
   cn_data = cohort_segments_df %>% 
     dplyr::rename(chr=seqnames) %>% 
@@ -1222,6 +1162,10 @@ sv_data = sv_data %>% filter(chr1 %in% chrom_order & chr2 %in% chrom_order)
   full_chrom$start=1
   full_chrom$end=500e6
   
+  if(nrow(sv_data) > max_svs_display) {
+    print(paste0("Too many SVs to display, skipping full plot", nrow(sv_data)))
+  } else {
+  
   p = ReConPlot(genes = plot_gene_lst,
                 sv_data,
                 cn_data,
@@ -1234,16 +1178,14 @@ sv_data = sv_data %>% filter(chr1 %in% chrom_order & chr2 %in% chrom_order)
                 label_interchr_SV = TRUE,
   )
   print(p)
-  
-  plot_region_instability_only = c(plot_selected_connecting_svs$chr_arm,plot_selected_connecting_svs$tsg_chr_arm,plot_selected_instability_region$chr_arm) %>% unique()
-  
-  plot_region_instability_only = chr_arms_df %>%
-    filter(chr_arm %in% plot_region_instability_only) %>% arrange(seqnames) %>%
-    select(seqnames,start,end) %>% dplyr::mutate(chr1=as.character(seqnames),chr=chr1,start=1,end=500e6) %>% as.data.frame() %>% unique()
+  }
   
   if(full_chrom %>% filter(!chr %in% plot_region_instability_only$chr) %>% nrow() == 0 ) {next()}
+  if(nrow(sv_data_instability_only) > max_svs_display) {
+    print(paste0("Too many SVs to display, skipping full plot", nrow(sv_data)))
+  } else {
   p = ReConPlot(genes = plot_gene_lst,
-                sv_data %>% filter(chr1 %in% plot_region_instability_only$seqnames),
+                sv_data_instability_only,
                 cn_data %>% filter(chr %in% plot_region_instability_only$seqnames),
                 chr_selection=plot_region_instability_only,
                 legend_SV_types=T,
@@ -1254,11 +1196,10 @@ sv_data = sv_data %>% filter(chr1 %in% chrom_order & chr2 %in% chrom_order)
                 label_interchr_SV = TRUE,
   )
   print(p)
-  
+  }
 }
 
 dev.off()
 
 }
 
-}
