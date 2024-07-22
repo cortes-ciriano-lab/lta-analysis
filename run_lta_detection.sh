@@ -23,13 +23,13 @@ for ct in $lst; do
 
     #add  underscore to prevent overgrapping eg for TCGA-OV
     #run_pattern="${ct}_*"
+#    singularity_settings="source('${config_cohort}');dataset_selection_label='${ct}';skip_plots=T;"
     singularity_settings="source('${config_cohort}');dataset_selection_label='${ct}';"
     
-    #singularity exec --bind ${singularity_bind_dir} ${singularity_img} R -e "${singularity_settings}source('${script}')"
-
     runscript="${script_dir}run_lta_detection.${ct}.sh"
 
      echo "#!/usr/bin/env bash" > ${runscript}
+echo "SINGULARITYENV_R_MAX_VSIZE=120Gb" >> ${runscript}
      echo "singularity exec --bind ${singularity_bind_dir} ${singularity_img} R -e \"${singularity_settings}source('${script}')\"" >> ${runscript}
 
     sbatch ${resources} ${runscript}

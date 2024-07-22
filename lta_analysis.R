@@ -124,11 +124,19 @@ tcga_gene_cn_sv_disruptions = rbind_no_colmatch(tcga_gene_cn_sv_disruptions,gene
 tcga_cohort_call_lta = tcga_cohort_call_lta %>% filter(subtype_short=="HGOS"|is.na(subtype_short))
 #ostoes is 49 of manual set and 8 additional cases
 
-#cohort overview 
+#cohort overview, dicentric LTA per gene
 tcga_gene_cn_sv_disruptions %>%  
   filter(basename %in% tcga_cohort_call_lta$basename) %>%
   filter(lta&tsg_gene_knockout_dicentric) %>%
   group_by(cohort_id,tsg_gene_name) %>% summarize(n=length(unique(basename)),samples=toString(unique(basename))) %>% arrange(-n)
+
+#TSGs most commonly affected and associated with oncogene amps
+tcga_gene_cn_sv_disruptions %>%  
+  filter(cohort_id!="osteos") %>%
+  filter(basename %in% tcga_cohort_call_lta$basename) %>%
+  filter(lta&tsg_gene_knockout_dicentric&lta_onco) %>%
+  group_by(tsg_gene_name) %>% summarize(n=length(unique(basename)),samples=toString(unique(basename))) %>% arrange(-n)
+
 
 #additional cases have not got amp so this is subset of manual set
 tcga_gene_cn_sv_disruptions %>%  
@@ -232,8 +240,13 @@ p = ggplot(amp_samples_overall) +
   scale_fill_manual(values = label_colors) + 
   theme_bw() + ylab("") + guides(fill=guide_legend(title=""))
 
-print(p +   geom_bar(aes(y=factor(cohort_id,levels=rev(cohort_order)),fill=factor(label_simple,levels=names(label_colors))),color="black", linewidth=.1,position = position_stack(reverse = TRUE)))
 print(p +   geom_bar(aes(y=factor(cohort_id,levels=rev(cohort_order)),fill=factor(label,levels=names(label_colors))),color="black", linewidth=.1,position = position_stack(reverse = TRUE)))
+
+p = p +   geom_bar(aes(y=factor(cohort_id,levels=rev(cohort_order)),fill=factor(label_simple,levels=names(label_colors))),color="black", linewidth=.1,position = position_stack(reverse = TRUE))
+print(p)
+
+saveRDS(p, file=paste0(plot_dir,"LTA_oncogene_amp.any_tsg.rds"))
+
 
 target_tsg="TP53"
 for(target_tsg in c("TP53",tsg_with_onco_amp_lta_no_tp53_breakdown$tsg_gene_name)) {
@@ -306,16 +319,19 @@ p = p + geom_bar(aes(y=factor(cohort_id,levels=rev(cohort_order)),fill=factor(la
 print(p)
 #print(p + geom_bar(aes(y=factor(cohort_id,levels=rev(cohort_order)),fill=factor(label,levels=names(label_colors))),color="black", linewidth=.1,,position = position_stack(reverse = TRUE)) )
 
-plot_amp_samples_notp53=p
+plot_amp_samples_no_tp53=p
 
 dev.off()
 
 pdf(paste0(plot_dir,"LTA_oncogene_amp.summary.landscape.pdf"),height=5,width=15)
 
 print(plot_amp_samples_tp53  + coord_flip() +  scale_y_discrete(limits=rev) + theme(axis.text.x = element_text(angle=90)))
-print(plot_amp_samples_notp53  + coord_flip() +  scale_y_discrete(limits=rev) + theme(axis.text.x = element_text(angle=90)))
+print(plot_amp_samples_no_tp53  + coord_flip() +  scale_y_discrete(limits=rev) + theme(axis.text.x = element_text(angle=90)))
 
 dev.off()
+
+saveRDS(plot_amp_samples_tp53, file=paste0(plot_dir,"LTA_oncogene_amp.tp53.rds"))
+saveRDS(plot_amp_samples_no_tp53, file=paste0(plot_dir,"LTA_oncogene_amp.no_tp53.rds"))
 
 
 
@@ -393,13 +409,8 @@ amp_per_ct_no_tp53 =  amp_samples_no_tp53 %>% group_by(cohort_id) %>% summarize(
 
 
 lta_prevalence_tp53 = tcga_cohort_size  %>% select(-sample_cnt) %>% left_join(amp_per_ct_tp53) %>% left_join(tsg_per_ct_tp53) %>% dplyr::mutate( across(.cols=everything(), ~replace_na(.x, F)) )
-lta_prevalence_tp53 %>% arrange(-LTA) %>% as.data.frame()
-
 lta_prevalence = tcga_cohort_size  %>% select(-sample_cnt) %>% left_join(amp_per_ct) %>% left_join(tsg_per_ct) %>% dplyr::mutate( across(.cols=everything(), ~replace_na(.x, F)) )
-lta_prevalence %>% arrange(-LTA) %>% as.data.frame()
-
 lta_prevalence_no_tp53 = tcga_cohort_size  %>% select(-sample_cnt) %>% left_join(amp_per_ct_no_tp53) %>% left_join(tsg_per_ct_no_tp53) %>% dplyr::mutate( across(.cols=everything(), ~replace_na(.x, F)) )
-lta_prevalence_no_tp53 %>% arrange(-LTA) %>% as.data.frame()
 
 
 label_order=c("Cohort_Size","TSG_koSV","OncoAmp","LTA","OncoAmp_LTA")
@@ -445,6 +456,10 @@ p = ggplot(lta_prevalence %>%
   ggtitle("LTA prevalence - events disrupting any TSG")
 print(p)
 
+saveRDS(p, file=paste0(plot_dir,"LTA_prevalence_breakdown.any_tsgs.rds"))
+saveRDS(p_lta_tp53, file=paste0(plot_dir,"LTA_prevalence_breakdown.tp53.rds"))
+saveRDS(p_lta_no_tp53, file=paste0(plot_dir,"LTA_prevalence_breakdown.no_tp53.rds"))
+
 dev.off()
 
 pdf(paste0(plot_dir,"LTA_prevalence_breakdown.landscape.pdf"),height=5,width=20)
@@ -455,29 +470,58 @@ print(p_lta_no_tp53  + coord_flip() + facet_grid(cols=vars(factor(cohort_id,leve
 dev.off()
 
 
+
 #rate of LTA------
 
 print("In all cases, LTA detected after application of the dicentric filter")
 print("TP53 LTA")
 
-lta_prevalence_tp53 = lta_prevalence_tp53 %>% mutate(LTA_frac = LTA/Cohort_Size, 
-                                           LTA_OncoAmp_frac = OncoAmp_LTA/OncoAmp) %>% arrange(-LTA_frac)
+lta_prevalence_tp53_export = lta_prevalence_tp53 %>% select(-TSG_koSV,-contains("multi")) 
 
-print(lta_prevalence_tp53 %>% select(-TSG_koSV,-contains("multi")))
+tcga_colsums_tp53 = lta_prevalence_tp53_export %>% filter(cohort_id!="osteos") %>% select(-cohort_id) %>% colSums() %>% t() %>% as.data.frame()
+tcga_colsums_tp53$cohort_id="TCGA_overall"
+lta_prevalence_tp53_export = rbind(lta_prevalence_tp53_export,tcga_colsums_tp53)
+lta_prevalence_tp53_export = lta_prevalence_tp53_export %>% mutate(LTA_frac = LTA/Cohort_Size, 
+                                           LTA_OncoAmp_frac = OncoAmp_LTA/Cohort_Size) %>% arrange(-LTA_OncoAmp_frac)
+lta_prevalence_tp53_export[is.na(lta_prevalence_tp53_export)]=0
 
+print(lta_prevalence_tp53_export)
+print(lta_prevalence_tp53_export %>% filter(Cohort_Size > 100))
+print(lta_prevalence_tp53_export %>% filter(cohort_id=="TCGA_overall"))
 
 print("other TSG with LTA, excluding tumors with TP53 LTA")
 
-lta_prevalence_no_tp53 = lta_prevalence_no_tp53 %>% mutate(LTA_frac = LTA/Cohort_Size, 
-                                                           LTA_OncoAmp_frac = OncoAmp_LTA/OncoAmp) %>% arrange(-LTA)
 
-print(lta_prevalence_no_tp53 %>% select(-contains("multi")))
+lta_prevalence_no_tp53_export = lta_prevalence_no_tp53 %>% select(-contains("multi")) 
+tcga_colsums_no_tp53 = lta_prevalence_no_tp53_export %>% filter(cohort_id!="osteos") %>% select(-cohort_id) %>% colSums() %>% t() %>% as.data.frame()
+tcga_colsums_no_tp53$cohort_id="TCGA_overall"
+lta_prevalence_no_tp53_export = rbind(lta_prevalence_no_tp53_export,tcga_colsums_no_tp53)
+lta_prevalence_no_tp53_export = lta_prevalence_no_tp53_export %>% mutate(LTA_frac = LTA/Cohort_Size, 
+                                                                   LTA_OncoAmp_frac = OncoAmp_LTA/Cohort_Size) %>% arrange(-LTA_OncoAmp_frac)
+
+lta_prevalence_no_tp53_export[is.na(lta_prevalence_no_tp53_export)]=0
+print(lta_prevalence_no_tp53_export)
+print(lta_prevalence_no_tp53_export %>% filter(Cohort_Size > 100))
+
+print(lta_prevalence_no_tp53_export %>% filter(cohort_id=="TCGA_overall"))
+
 
 print("any type of LTA ")
 
-lta_prevalence = lta_prevalence %>% mutate(LTA_frac = LTA/Cohort_Size, 
-                                                           LTA_OncoAmp_frac = OncoAmp_LTA/OncoAmp) %>% arrange(-LTA)
 
-print(lta_prevalence %>% select(-TSG_koSV,-contains("multi")))
+lta_prevalence_export = lta_prevalence %>% select(-TSG_koSV,-contains("multi")) 
+tcga_colsums = lta_prevalence_export %>% filter(cohort_id!="osteos") %>% select(-cohort_id) %>% colSums() %>% t() %>% as.data.frame()
+tcga_colsums$cohort_id="TCGA_overall"
+lta_prevalence_export = rbind(lta_prevalence_export,tcga_colsums)
+lta_prevalence_export = lta_prevalence_export %>% mutate(LTA_frac = LTA/Cohort_Size, 
+                                                                         LTA_OncoAmp_frac = OncoAmp_LTA/Cohort_Size) %>% arrange(-LTA_OncoAmp_frac)
 
+lta_prevalence_export[is.na(lta_prevalence_export)]=0
+print(lta_prevalence_export)
+print(lta_prevalence_export %>% filter(cohort_id=="TCGA_overall"))
+
+
+write.table(lta_prevalence_export,paste0(plot_dir,"LTA_prevalence.any_tsgs.tsv"),sep="\t",row.names = F,col.names = T)
+write.table(lta_prevalence_no_tp53_export, paste0(plot_dir,"LTA_prevalence.no_tp53.tsv"),sep="\t",row.names = F,col.names = T)
+write.table(lta_prevalence_tp53_export, paste0(plot_dir,"LTA_prevalence.tp53.tsv"),sep="\t",row.names = F,col.names = T)
 
