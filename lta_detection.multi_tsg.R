@@ -808,19 +808,19 @@ gene_cn_sv_disruptions = gene_cn_sv_disruptions %>%
     gene_knockout =  hmf_biallelic | (!is.na(hmf_driver) & gene_sv_bp) | gene_sv_bp_biallelic | weighted_CN<=loh_minorCN.max,
     gene_knockout_sv_component = gene_loh & gene_knockout,
     #gene_knockout_sv_component_strict = (gene_sv_bp_biallelic | (hmf_biallelic & (gene_loh & (gene_region_cgr | gene_region_ctx))))
-    gene_knockout_sv_component_strict = ((gene_sv_bp_biallelic) | 
-      (gene_knockout & gene_loh & (gene_region_cgr | gene_region_ctx | gene_sv_bp) & chr_arm_frac_loh<=0.75) ),
+    # gene_knockout_sv_component_strict = ((gene_sv_bp_biallelic) | 
+    #   (gene_knockout & gene_loh & (gene_region_cgr | gene_region_ctx | gene_sv_bp) & chr_arm_frac_loh<=0.75) ),
     
-    gene_knockout_dicentric_prev = ((gene_sv_bp_biallelic | (gene_knockout & gene_loh & (gene_region_cgr | gene_region_ctx | gene_sv_bp) )) & 
-      chr_arm_frac_loh <= specific_sv_disruption.chr_arm_frac_loh.max &
-      chr_arm_terminal_frac_loh >= specific_sv_disruption.terminal_frac_loh.min),
-    
-    gene_knockout_dicentric = ((gene_sv_bp_biallelic | (gene_knockout & gene_loh & (gene_region_cgr | gene_region_ctx_notaf | gene_sv_bp) )) &
-                                  (chr_arm_terminal_frac_loh >= 0.75 | seg_amp9_kbp>1e3) &
-                                  (chr_arm_frac_loh <=0.9 | chr_arm_seg_cnt>=25) &
-                                  (chrom_frac_loh <=0.9 | chrom_frac_seg_cnt>=50) ),
-    # seg didnt work as expected
-    gene_knockout_dicentric2 = ((gene_sv_bp_biallelic | (gene_knockout & gene_loh & (gene_region_cgr | gene_region_ctx_notaf | gene_sv_bp) )) & 
+    # gene_knockout_dicentric_prev = ((gene_sv_bp_biallelic | (gene_knockout & gene_loh & (gene_region_cgr | gene_region_ctx | gene_sv_bp) )) & 
+    #   chr_arm_frac_loh <= specific_sv_disruption.chr_arm_frac_loh.max &
+    #   chr_arm_terminal_frac_loh >= specific_sv_disruption.terminal_frac_loh.min),
+    # 
+    # gene_knockout_dicentric = ((gene_sv_bp_biallelic | (gene_knockout & gene_loh & (gene_region_cgr | gene_region_ctx_notaf | gene_sv_bp) )) &
+    #                               (chr_arm_terminal_frac_loh >= 0.75 | seg_amp9_kbp>1e3) &
+    #                               (chr_arm_frac_loh <=0.9 | chr_arm_seg_cnt>=25) &
+    #                               (chrom_frac_loh <=0.9 | chrom_frac_seg_cnt>=50) ),
+    # # seg didnt work as expected
+    gene_knockout_dicentric = ((gene_sv_bp_biallelic | (gene_knockout & gene_loh & (gene_region_cgr | gene_region_ctx_notaf | gene_sv_bp) )) & 
                                  (chr_arm_terminal_frac_loh >= 0.75 | (chr_arm_terminal_frac_loh>=0.33 & seg_amp9_kbp>1e3)) &
                                  ( ! (chr_arm_frac_loh >0.9 & chr_arm_largest_frac_cn_state>0.9 ) & chr_arm_frac_loh<0.995 ) &
                                  ( ! (chrom_frac_loh >0.9 & chrom_largest_frac_cn_state >0.9) )
@@ -969,7 +969,10 @@ selected_connected_tsg_regions = svs_connecting_tsg_instability %>%
   dplyr::rename_with(.fn=function(x){paste0("cgr_",x)},.cols=c("multichromosomal","chrom_all","classification")) %>%
   left_join(tsg_region %>% dplyr::mutate(chrom=seqnames) %>%
               select(region_id,chrom,gene_name,weighted_CN,weighted_minorCN,max_tumor_af,max_multiplicity,contains("hmf"),
-                     gene_loh,gene_sv_bp_biallelic,gene_region_cgr,gene_region_ctx,gene_region_ctx_notaf,gene_sv_bp,gene_knockout_dicentric,gene_knockout_dicentric_prev,gene_knockout_dicentric2,gene_knockout_sv_component,gene_knockout_sv_component_strict) %>% unique() %>%
+                     gene_loh,gene_sv_bp_biallelic,gene_region_cgr,gene_region_ctx,gene_region_ctx_notaf,gene_sv_bp,
+                     #gene_knockout_dicentric_prev,gene_knockout_dicentric2,gene_knockout_sv_component_strict
+                     gene_knockout_sv_component,gene_knockout_dicentric,
+                     ) %>% unique() %>%
               dplyr::rename_with(.fn=function(x){paste0("tsg_",x)}),
             by=c("tsg_region_id"))  %>%
   as.data.frame()
@@ -1082,8 +1085,9 @@ gene_cn_sv_disruptions.call_lta = gene_cn_sv_disruptions.call_lta %>%
   left_join(gene_cn_sv_disruptions %>% select(basename,gene_name,weighted_CN,weighted_minorCN,max_tumor_af,max_multiplicity,contains("hmf"),
                                               gene_loh,gene_sv_bp_biallelic,gene_region_cgr,gene_region_ctx,gene_region_ctx_notaf,gene_sv_bp,
                                               chr_arm_terminal_frac_loh,chr_arm_frac_loh,chrom_frac_loh,seg_amp9_kbp,chr_arm_largest_frac_cn_state,chrom_largest_frac_cn_state,
-                                              gene_knockout,gene_knockout_sv_component,gene_knockout_sv_component_strict,
-                                              gene_knockout_dicentric,gene_knockout_dicentric_prev,gene_knockout_dicentric2) %>% unique() %>%
+                                              #gene_knockout_sv_component_strict,gene_knockout_dicentric_prev,gene_knockout_dicentric2,
+                                              gene_knockout,gene_knockout_sv_component,gene_knockout_dicentric
+                                              ) %>% unique() %>%
               dplyr::rename_with(.cols=-basename,.fn=function(x){paste0("tsg_",x)}) )
 
 gene_cn_sv_disruptions.call_lta = gene_cn_sv_disruptions.call_lta %>% dplyr::mutate(connected_to_tp53_tsg_region = 
@@ -1106,8 +1110,9 @@ selected_connected_tsg_regions_annot = selected_connected_tsg_regions %>% left_j
 oncogene_amp_annot = drivers_amplified %>% 
   left_join(instability_region_oncogene_amp_long %>% select(basename,chr_arm,gene_name,cluster_id,region_id),by=c("basename", "gene_name", "chr_arm")) %>%
   left_join(selected_connected_tsg_regions_annot %>%
-              select(region_id,cgr_chrom_all,cgr_classification,tsg_region_id,tsg_gene_name,tsg_chr_arm,tsg_gene_knockout_sv_component,
-                     tsg_gene_knockout_sv_component_strict,tsg_gene_knockout_dicentric,tsg_gene_knockout_dicentric_prev,tsg_gene_knockout_dicentric2,tsg_to_multiple_chrom,cgr_multichromosomal_excl_tsg_region,
+              select(region_id,cgr_chrom_all,cgr_classification,tsg_region_id,tsg_gene_name,tsg_chr_arm,tsg_gene_knockout_sv_component,tsg_gene_knockout_dicentric,
+                     #tsg_gene_knockout_sv_component_strict,tsg_gene_knockout_dicentric_prev,tsg_gene_knockout_dicentric2,
+                     tsg_to_multiple_chrom,cgr_multichromosomal_excl_tsg_region,
                      contains("lta"),connected_to_tp53_tsg_region),relationship = "many-to-many")
 #should add indirect amp here too but is tricky 
 #selected_connected_tsg_regions_annot %>% filter(tsg_gene_name=="TP53") %>% filter(basename %in% filter(cohort_call_lta,tsg_gene_name=="TP53" & lta_onco_multichrom & !lta_onco_direct)$basename) %>% select(basename,cgr_chrom_all) %>% unique()
@@ -1150,8 +1155,8 @@ if(dataset_selection_label=="osteos") {
   plot_cases = call_lta_annot %>% filter(lta)
   
 } else {
-  #plot_cases = call_lta_annot %>% filter(lta_onco)
-  plot_cases = call_lta_annot %>% filter(lta_onco_multichrom)
+  plot_cases = call_lta_annot %>% filter(lta_onco&tsg_gene_knockout_dicentric)
+  #plot_cases = call_lta_annot %>% filter(lta_onco_multichrom)
 }
 
 plot_cases = plot_cases  %>% arrange(desc(tsg_gene_name)) %>% arrange(-tsg_gene_knockout_dicentric,-lta_onco)
@@ -1161,10 +1166,8 @@ plot_cases = plot_cases  %>% arrange(desc(tsg_gene_name)) %>% arrange(-tsg_gene_
 #plot_cases = call_lta_annot %>% filter(lta&tsg_gene_name!="TP53"&tsg_chrom_frac_loh>0.9&tsg_gene_knockout_sv_component_strict==F&connected_to_tp53_tsg_region==F)
 #plot from perspective of tsg_region_id 
 
-target_tsg_region_id="gel-100k_215000400-tumour-1_LP3000428-DNA_A01_LSAMP"
+#target_tsg_region_id="gel-100k_215000400-tumour-1_LP3000428-DNA_A01_LSAMP"
 #target_tsg_region_id="gel-100k_215000612-tumour-1_LP3000296-DNA_E12_CDKN2A"
-target_tsg_region_id="pcawg_DO52642_f83fc777-5416-c3e9-e040-11ac0d482c8e_TP53"
-target_tsg_region_id="gel-100k_215001679-tumour-2_LP3000850-DNA_F01_TP53"
 for(target_tsg_region_id in plot_cases$tsg_region_id) {
   sample=filter(call_lta_annot,tsg_region_id==target_tsg_region_id)
   target_sample=sample$basename
