@@ -1,6 +1,10 @@
 #analyse results
 #on server:
-#source("/nfs/research/icortes/belzen/src/TCGA_WGD_analysis/lta_detection.conf")
+#start singularity session:
+#singularity exec --bind /nfs/research/icortes/ /nfs/research/icortes/belzen/src/structural_variation_202405_amd.sif R -e "source('/nfs/research/icortes/belzen/src/TCGA_WGD_analysis/lta_detection.conf');source('/nfs/research/icortes/belzen/src/lta-analysis/lta_analysis.R')"
+#default output for plots here
+#/nfs/research/icortes/belzen/results/lta_detection/multi_tsg/plots/
+#specify other plot dir that is writable
 
 suppressPackageStartupMessages({
   library(GenomicRanges, quietly=TRUE)
@@ -237,11 +241,9 @@ for(target_tsg in c("TP53",tsg_with_onco_amp_lta_no_tp53_breakdown$tsg_gene_name
 amp_samples_single_tsg = tcga_oncogene_amp_annot %>% 
   filter(tsg_gene_name==target_tsg | is.na(tsg_gene_name)) %>%
   group_by(cohort_id,tsg_gene_name,basename,sample_has_tp53_lta) %>% 
-  summarize(#onco_amp = length(unique(gene_name)),
-            #amp_cgr=any(amp_cgr),
-            lta_onco_dicentric=any(lta_dicentric),
+  summarize(lta_onco_dicentric=any(lta_dicentric),
             lta_onco_multichrom_dicentric=any(lta_onco_multichrom&lta_dicentric))
-#for genes other than tp53, only count if not connected to tp53
+#for genes other than tp53, only count if sample has no tp53 LTA
 amp_samples_single_tsg = amp_samples_single_tsg %>% dplyr::mutate(assign_lta_event = tsg_gene_name=="TP53" | sample_has_tp53_lta==F)
 
 amp_samples_single_tsg = amp_samples_overall %>% select(basename,onco_amp,amp_cgr) %>% 
@@ -255,9 +257,6 @@ amp_samples_single_tsg = amp_samples_single_tsg %>% dplyr::mutate(
                                ifelse(amp_cgr,"Amp_CGR","Amp_Other"))
 )
 
-if(target_tsg=="TP53") {
-  amp_samples_tp53=amp_samples_single_tsg
-}
 
 p = ggplot(amp_samples_single_tsg) + 
   geom_col(data=tcga_cohort_size,aes(y=factor(cohort_id,levels=rev(cohort_order)),x=sample_cnt), fill="grey",alpha=0.5,color="black", linewidth=.1) +
@@ -265,16 +264,58 @@ p = ggplot(amp_samples_single_tsg) +
   scale_fill_manual(values = label_colors) +
   theme_bw() + ylab("") + guides(fill=guide_legend(title=""))
 
-print(p + geom_bar(aes(y=factor(cohort_id,levels=rev(cohort_order)),fill=factor(label_simple,levels=names(label_colors))),color="black", linewidth=.1,,position = position_stack(reverse = TRUE)) )
+p = p + geom_bar(aes(y=factor(cohort_id,levels=rev(cohort_order)),fill=factor(label_simple,levels=names(label_colors))),color="black", linewidth=.1,,position = position_stack(reverse = TRUE)) 
+print(p)
 #print(p + geom_bar(aes(y=factor(cohort_id,levels=rev(cohort_order)),fill=factor(label,levels=names(label_colors))),color="black", linewidth=.1,,position = position_stack(reverse = TRUE)) )
+if(target_tsg=="TP53") {
+  amp_samples_tp53=amp_samples_single_tsg
+  plot_amp_samples_tp53=p
+}
 
 
 }
 
 #all non tp53 together
+#for genes other than tp53, only count if sample has no tp53 LTA
+
+amp_samples_no_tp53 = tcga_oncogene_amp_annot %>% 
+  filter(tsg_gene_name!="TP53" & sample_has_tp53_lta==F) %>%
+  group_by(cohort_id,basename) %>% 
+  summarize(lta_onco_dicentric=any(lta_dicentric),
+            lta_onco_multichrom_dicentric=any(lta_onco_multichrom&lta_dicentric))
+amp_samples_no_tp53 = amp_samples_overall %>% select(basename,onco_amp,amp_cgr) %>% 
+  left_join(amp_samples_no_tp53) 
+amp_samples_no_tp53 = amp_samples_no_tp53 %>% dplyr::mutate(
+  lta_onco_dicentric = ifelse(is.na(lta_onco_dicentric),F,lta_onco_dicentric),
+  lta_onco_multichrom_dicentric=ifelse(is.na(lta_onco_multichrom_dicentric),F,lta_onco_multichrom_dicentric),
+  label = ifelse(lta_onco_multichrom_dicentric,"Amp_LTA-multi", 
+                 ifelse(lta_onco_dicentric,"Amp_LTA-single", 
+                        ifelse(amp_cgr,"Amp_CGR","Amp_Other"))),
+  label_simple = ifelse(lta_onco_dicentric,"Amp_LTA", 
+                        ifelse(amp_cgr,"Amp_CGR","Amp_Other"))
+)
+
+
+p = ggplot(amp_samples_no_tp53) + 
+  geom_col(data=tcga_cohort_size,aes(y=factor(cohort_id,levels=rev(cohort_order)),x=sample_cnt), fill="grey",alpha=0.5,color="black", linewidth=.1) +
+  ggtitle(paste0("# samples with oncogene amplifications, with LTA involving other TSGs (excl TP53 LTA)")) +
+  scale_fill_manual(values = label_colors) +
+  theme_bw() + ylab("") + guides(fill=guide_legend(title=""))
+
+p = p + geom_bar(aes(y=factor(cohort_id,levels=rev(cohort_order)),fill=factor(label_simple,levels=names(label_colors))),color="black", linewidth=.1,,position = position_stack(reverse = TRUE)) 
+print(p)
+#print(p + geom_bar(aes(y=factor(cohort_id,levels=rev(cohort_order)),fill=factor(label,levels=names(label_colors))),color="black", linewidth=.1,,position = position_stack(reverse = TRUE)) )
+
+plot_amp_samples_notp53=p
+
 dev.off()
 
+pdf(paste0(plot_dir,"LTA_oncogene_amp.summary.landscape.pdf"),height=5,width=15)
 
+print(plot_amp_samples_tp53  + coord_flip() +  scale_y_discrete(limits=rev) + theme(axis.text.x = element_text(angle=90)))
+print(plot_amp_samples_notp53  + coord_flip() +  scale_y_discrete(limits=rev) + theme(axis.text.x = element_text(angle=90)))
+
+dev.off()
 
 
 
@@ -287,7 +328,7 @@ tcga_gene_cn_sv_disruptions = tcga_gene_cn_sv_disruptions %>% dplyr::mutate(lta_
 
 #equiv of amp_cgr for tsgs is tsg_gene_knockout_sv_component
 
-
+#for the overall plot regardless of TSG disrupted
 tsg_disruption_samples= tcga_gene_cn_sv_disruptions %>%  
   #filter(basename %in% filter(tcga_cohort_call_lta,subtype_short=="HGOS")$basename) %>% #check OS first
   # filter(tsg_gene_name=="TP53") %>%
@@ -303,8 +344,7 @@ tsg_per_ct =  tsg_disruption_samples %>% group_by(cohort_id) %>% summarize(TSG_k
                                                                                      LTA=sum(lta_dicentric),
                                                                                      LTA_multi=sum(lta_multichrom_dicentric))
 
-
-#for the overall plot regardless of TSG disrupted
+#tp53 only version
 tsg_disruption_samples_tp53 = tcga_gene_cn_sv_disruptions %>%  
   #filter(basename %in% filter(tcga_cohort_call_lta,subtype_short=="HGOS")$basename) %>% #check OS first
   filter(tsg_gene_name=="TP53") %>%
@@ -315,9 +355,26 @@ tsg_disruption_samples_tp53 = tcga_gene_cn_sv_disruptions %>%
             lta_multichrom_dicentric=any(lta_dicentric&lta_multichrom)) %>% 
   dplyr::mutate(label = ifelse(lta_dicentric,"LTA","TSG_koSV"),label_simple = label)
 
+#other tsgs no tp53  => excluding tumors with tp53 
+tsg_disruption_samples_no_tp53= tcga_gene_cn_sv_disruptions %>%  
+  #filter(basename %in% filter(tcga_cohort_call_lta,subtype_short=="HGOS")$basename) %>% #check OS first
+  filter(tsg_gene_name!="TP53" & sample_has_tp53_lta==F) %>%
+  filter(lta_dicentric) %>%
+  group_by(cohort_id,basename) %>% 
+  summarize(lta_dicentric=any(lta_dicentric),
+            lta_multichrom_dicentric=any(lta_dicentric&lta_multichrom)) %>% 
+  dplyr::mutate(label = ifelse(lta_dicentric,"LTA",NA),label_simple = label)
+
+
+
 tsg_per_ct_tp53 =  tsg_disruption_samples_tp53 %>% group_by(cohort_id) %>% summarize(TSG_koSV=length(unique(basename)), #should be identical to n(),
                                                                            LTA=sum(lta_dicentric),
                                                                            LTA_multi=sum(lta_multichrom_dicentric))
+
+tsg_per_ct_no_tp53 =  tsg_disruption_samples_no_tp53 %>% group_by(cohort_id) %>% summarize(
+                                                                                           LTA=sum(lta_dicentric),
+                                                                                           LTA_multi=sum(lta_multichrom_dicentric))
+
 
 
 amp_per_ct =  amp_samples %>% group_by(cohort_id) %>% summarize(OncoAmp=length(unique(basename)), #should be identical to n(),
@@ -330,11 +387,19 @@ amp_per_ct_tp53 =  amp_samples_tp53 %>% group_by(cohort_id) %>% summarize(OncoAm
                                                                 OncoAmp_LTA_multi=sum(lta_onco_multichrom_dicentric,na.rm = T))
 
 
+amp_per_ct_no_tp53 =  amp_samples_no_tp53 %>% group_by(cohort_id) %>% summarize(OncoAmp=length(unique(basename)), #should be identical to n(),
+                                                                          OncoAmp_LTA=sum(lta_onco_dicentric,na.rm = T),
+                                                                          OncoAmp_LTA_multi=sum(lta_onco_multichrom_dicentric,na.rm = T))
+
+
 lta_prevalence_tp53 = tcga_cohort_size  %>% select(-sample_cnt) %>% left_join(amp_per_ct_tp53) %>% left_join(tsg_per_ct_tp53) %>% dplyr::mutate( across(.cols=everything(), ~replace_na(.x, F)) )
 lta_prevalence_tp53 %>% arrange(-LTA) %>% as.data.frame()
 
 lta_prevalence = tcga_cohort_size  %>% select(-sample_cnt) %>% left_join(amp_per_ct) %>% left_join(tsg_per_ct) %>% dplyr::mutate( across(.cols=everything(), ~replace_na(.x, F)) )
 lta_prevalence %>% arrange(-LTA) %>% as.data.frame()
+
+lta_prevalence_no_tp53 = tcga_cohort_size  %>% select(-sample_cnt) %>% left_join(amp_per_ct_no_tp53) %>% left_join(tsg_per_ct_no_tp53) %>% dplyr::mutate( across(.cols=everything(), ~replace_na(.x, F)) )
+lta_prevalence_no_tp53 %>% arrange(-LTA) %>% as.data.frame()
 
 
 label_order=c("Cohort_Size","TSG_koSV","OncoAmp","LTA","OncoAmp_LTA")
@@ -343,9 +408,8 @@ prevalence_label_colors=c("Cohort_Size"="grey","LTA"="purple3","OncoAmp"="red3",
 
 
 pdf(paste0(plot_dir,"LTA_prevalence_breakdown.pdf"),height=20,width=10)
-#pdf(paste0(plot_dir,"LTA_prevalence_breakdown.pdf"),height=25,width=10)
 
-p = ggplot(lta_prevalence_tp53 %>% 
+p_lta_tp53 = ggplot(lta_prevalence_tp53 %>% 
          select(-contains("multi"),-TSG_koSV) %>%
          pivot_longer(-cohort_id,values_to = "cnt",names_to="attr") %>%
          dplyr::mutate(attr = factor(attr,levels=names(prevalence_label_colors)))
@@ -355,7 +419,19 @@ p = ggplot(lta_prevalence_tp53 %>%
   theme_bw() + ylab("") + xlab("# samples") +
   scale_fill_manual(values=prevalence_label_colors) +
   ggtitle("LTA prevalence - events disrupting TP53")
-print(p)
+print(p_lta_tp53)
+
+p_lta_no_tp53 = ggplot(lta_prevalence_no_tp53 %>% 
+             select(-contains("multi")) %>%
+             pivot_longer(-cohort_id,values_to = "cnt",names_to="attr") %>%
+             dplyr::mutate(attr = factor(attr,levels=names(prevalence_label_colors)))
+) +
+  geom_col(aes(x=cnt,y=factor(attr,levels=names(prevalence_label_colors) %>% rev()),fill=attr),color="black", linewidth=.1,position = position_stack(reverse = TRUE)) +
+  facet_grid(rows=vars(factor(cohort_id,levels=cohort_order))) + 
+  theme_bw() + ylab("") + xlab("# samples") +
+  scale_fill_manual(values=prevalence_label_colors) +
+  ggtitle("LTA prevalence - excluding tumors with TP53 LTA")
+print(p_lta_no_tp53)
 
 p = ggplot(lta_prevalence %>% 
          select(-contains("multi"),-TSG_koSV) %>%
@@ -371,5 +447,37 @@ print(p)
 
 dev.off()
 
+pdf(paste0(plot_dir,"LTA_prevalence_breakdown.landscape.pdf"),height=5,width=20)
+
+print(p_lta_tp53  + coord_flip() +  facet_grid(cols=vars(factor(cohort_id,levels=cohort_order))) + scale_y_discrete(limits=rev) + theme(axis.text.x = element_text(angle=90)))
+print(p_lta_no_tp53  + coord_flip() + facet_grid(cols=vars(factor(cohort_id,levels=cohort_order))) + scale_y_discrete(limits=rev) + theme(axis.text.x = element_text(angle=90)))
+
+dev.off()
+
+
+#rate of LTA------
+
+print("In all cases, LTA detected after application of the dicentric filter")
+print("TP53 LTA")
+
+lta_prevalence_tp53 = lta_prevalence_tp53 %>% mutate(LTA_frac = LTA/Cohort_Size, 
+                                           LTA_OncoAmp_frac = OncoAmp_LTA/OncoAmp) %>% arrange(-LTA_frac)
+
+print(lta_prevalence_tp53 %>% select(-TSG_koSV,-contains("multi")))
+
+
+print("other TSG with LTA, excluding tumors with TP53 LTA")
+
+lta_prevalence_no_tp53 = lta_prevalence_no_tp53 %>% mutate(LTA_frac = LTA/Cohort_Size, 
+                                                           LTA_OncoAmp_frac = OncoAmp_LTA/OncoAmp) %>% arrange(-LTA)
+
+print(lta_prevalence_no_tp53 %>% select(-contains("multi")))
+
+print("any type of LTA ")
+
+lta_prevalence = lta_prevalence %>% mutate(LTA_frac = LTA/Cohort_Size, 
+                                                           LTA_OncoAmp_frac = OncoAmp_LTA/OncoAmp) %>% arrange(-LTA)
+
+print(lta_prevalence %>% select(-TSG_koSV,-contains("multi")))
 
 
