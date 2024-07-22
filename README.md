@@ -7,47 +7,31 @@ This repository contains scripts for the detection and analysis of Loss-Transloc
 
 ## Detection of LTA events 
 
-The main characteristic of the LTA events discovered in osteosaroma is a double strand break leading to concomitant TP53 inactivation and segmental amplifications, often harbouring oncogenes. This process is mediated by unstable dicentric chromosomes and contributes to genome-wide genomic instability and the formation of highly complex karyotypes.
+The main characteristic of the LTA events discovered in osteosarcoma is a double strand break leading to concomitant TP53 inactivation and segmental amplifications, often harbouring oncogenes. This process is mediated by unstable dicentric chromosomes and contributes to genome-wide genomic instability and the formation of highly complex karyotypes.
 
-To detect LTA events, we  searched for connections between 17p and chromosome arms with complex genomic rearrangments (CGRs)
-This allowed us to detect 64 of 68 manually identified LTA events in HGOS, the 4 missing cases had indirect connections between 17p and the resulting CGR. 
+To detect LTA events, we searched for connections between chromosome 17p and other chromosome arms with chromothripsis (CTX) or complex genomic rearrangements (CGRs). This allowed us to detect 64 out of 68 manually identified LTA events in HGOS; the 4 missing cases had indirect connections between 17p and the resulting CGR.
 
-Next, we formulated criteria to look for evidence of biallelic TP53 disruption co-occurring with dicentric chromosome formation. 
-For biallelic disruption, we used driver mutations identified by the HMF pipeline. In addition, we considered SV breakpoints inside TP53 and loss of heterozygocity (LOH) that indicate disruption through an SV. 
+Next, we formulated criteria to look for evidence of biallelic TP53 disruption co-occurring with dicentric chromosome formation. For biallelic disruption, we used driver mutations identified by the HMF pipeline. In addition, we considered SV breakpoints inside TP53 and loss of heterozygosity (LOH) events that indicate disruption through a double-strand break mapping downstream TP53.
 
-For dicentric chromosome formation, we selected events where there is loss of the terminal segment of 17p due to an SV: 
-
+For the detection of dicentric chromosome formation, we selected events where there is loss of the terminal segment of chr17p due to an SV. All of the following criteria need to apply: 
 * Presence of an SV in the TP53 gene body, or a CTX or CGR in the region between start of TP53 and the centromere.
-* LOH in the 17p terminal segment up to and including TP53 (minimum 75%)
-   * Alternatively: LOH in >33% and presence of an amplification (minimum 1kbp of 9 copies or more)
-* Absence of full chromosome LOH and chromosome arm LOH 
-  * Removing cases where chromosome (arm) shows extensive LOH (>90%) and exists in a single copy number state (>90%). This removes aneuploidies but allows for extensive LOH due to rearrangements.
-  * Removing all cases with full chromosome arm LOH (>99.5%) 
+* Loss of the 17p terminal segment harbouring TP53: a  LOH in the 17p terminal segment, minimum of 75% LOH in the genomic region from the start of the chromosome up to and including TP53. 
+   * Alternatively: LOH in >33% of the terminal segment of 17p together with an amplification (minimum 1kbp of 9 copies or more)
+* Absence of full chromosome LOH and chromosome arm LOH
+   * Removing cases where the chromosome (arm) shows extensive LOH (>90%) and exists in a single copy number state (>90%). This removes aneuploidies but does not discard extensive LOH due to rearrangements.
+   * Removing all cases with full chromosome arm LOH (>99.5%)
 
-This filtering removes cases where gene is knockout is induced by a simple SV in a haploid chromosome arm, as well as non-specific losses of the entire 17p chromosome arm. However, it allows for cases where the terminal segment loss is obfuscated due to focal amplifications or non-specific LOH of the chromosome (arm) is present due to additional rearrangements. 
+This filtering removes cases where the gene is knocked-out by a simple SV in a completely haploid chromosome arm, as well as non-specific losses of the entire 17p chromosome arm. However, it allows for cases where the terminal segment loss is obfuscated due to focal amplifications or non-specific LOH of the chromosome (arm) is present due to additional rearrangements.
 
+In 49 of 68 manually identified cases in HGOS, we also computationally verified LTA events with evidence of dicentric chromosome formation, which we termed as high-confidence LTA events.
 
-In 49 of 68 manually identified cases in HGOS, we also computationally verified LTA events with evidence of dicentric chromosome formation.
+For the 19 cases that did not pass these filters, this was often due to missing SVs leading to insufficient evidence for TP53 knockout by an SV and absence of a CTX or CGR in 17p. Alternatively, some cases fell below the detection limit for 17p LOH of the terminal segment or instead had full 17p LOH often with additional rearrangements leading to breakpoints on 17q. Finally, for a few tumours we did observe full chr17 LOH but these were rare occurrences. These extra cases were labelled as low-confidence LTA-cases as were detected only through manual analysis.
 
-For the cases that did not pass these filters, this was often due to missing SVs leading to insufficient evidence for TP53 knockout by an SV, and absence of a CTX or CGR in 17p. Alternatively, some cases fell below the detection limit for 17p LOH of the terminal segment or instead had full 17p LOH often with additional rearrangements leading to breakpoints on 17q. Finally, for a few tumors we did observe full chr17 LOH but these were rare occurrences.
-
-
-
-## Contribution of LTA to oncogene amplification in TCGA dataset 
+## Contribution of LTA to oncogene amplification in the TCGA dataset 
 
 To systematically detect LTA events across cancer types, we expanded the analysis to include disruption of other TSGs. For each cancer type, we used known driver TSGs for which biallelic disruption was identified in at least 10% of samples.
 
-To focus on events that potentially provide a selective advantage to the tumor, we specifically looked for connections with chromosome arms that harbour oncogene amplifications. 
-
-
-
-### results /remove for repo
-In HGOS, 29 of 49 high-confidence LTA events were associated with oncogene amplification.
-
-In HGOS, the 17 samples that had other TSGs affected by LTA consisted for the vast majority of samples with TP53 LTA detected (n= 12) indicating that LTA can also disrupt additional TSGs. In 7 of 12 cases we could find connections to the TP53 LTA event
-
-Since we observed in osteosarcoma that LTA events with TP53 can also affect other TSGs, we looked for connections between the whether the CGRs involved in LTAs with other TSGs were connected to the TP53 gene region. 
-
+To focus on events that potentially provide a selective advantage to the tumor, we specifically looked for translocations to chromosome arms that harbour oncogene amplifications. To systematically detect LTA events across cancer types, we expanded the analysis to include disruption of other TSGs. For each cancer type, we used known driver TSGs for which biallelic disruption was identified in at least 10% of samples. Furthermore, wince we observed in osteosarcoma that LTA events with TP53 can also affect other TSGs, we looked for connections between the whether the CGRs involved in LTAs with other TSGs were connected to the TP53 gene region. 
 
 
 ## Usage
@@ -67,8 +51,14 @@ Please specify paths in the cohort file `lta_detection.conf`
 
 Optional arguments: `show_plots=FALSE` to skip recon plots  and `dataset_selection_label='TCGA-SARC'` to subset the cohort file 
 
-`SINGULARITYENV_R_MAX_VSIZE=80Gb
+`SINGULARITYENV_R_MAX_VSIZE=150Gb
 singularity exec --bind /path/to/input/ /path/to/script/structural_variation_202405_amd.sif R -e "source('/path/to/script/lta_detection.conf ');show_plots=T;dataset_selection_label='TCGA-SARC';source('/path/to/script/lta_detection.multi_tsg.R')"`
+
+Plots and tables
+
+`SINGULARITYENV_R_MAX_VSIZE=150Gb
+singularity exec --bind /path/to/input/ /path/to/script/structural_variation_202405_amd.sif R -e "source('/path/to/script/lta_detection.conf ');show_plots=T;dataset_selection_label='TCGA-SARC';source('/path/to/script/lta_analysis.R')"`
+
 
 Image: https://hub.docker.com/layers/ivanbelzen/structural_variation/202405_amd/images/sha256-19b705ec12273cb4b01dcb46da378e5fb54308692772e000414c09d44a6fa23d
 
