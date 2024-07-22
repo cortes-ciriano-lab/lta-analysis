@@ -669,21 +669,28 @@ region_tsg_chr_arm_terminal_cn_overlap = region_tsg_chr_arm_terminal_cn_overlap 
 cn_tsg_chr_arm_terminal = region_tsg_chr_arm_terminal_cn_overlap %>% 
   group_by(basename,gene_name,sample_gene,region_width,gene_id) %>% 
   filter(minorAlleleCopyNumber<=loh_minorCN.max) %>% 
-  summarize(seg_loh = sum(overlap_set2_set1*cn_seg_width)) %>%
+  summarize(seg_loh = sum(overlap_set2_set1*cn_seg_width),
+            chr_arm_terminal_seg_cnt = n()) %>%
   dplyr::mutate(chr_arm_terminal_frac_loh = seg_loh / region_width) %>% as.data.frame() %>%
   dplyr::select(basename,gene_name,sample_gene,chr_arm_terminal_frac_loh)
+
+
+cohort_segments_df = cohort_segments_df %>% dplyr::mutate(copyNumberInt=round(copyNumber))
 
 chr_arms_cn_overlap = get_reciprocal_overlap_pairs(chr_arms,cn_seg_gr,reciprocal_overlap = 0,svtype_matching = F,ignore_strand = T)
 chr_arms_cn_overlap = chr_arms_cn_overlap  %>% dplyr::rename(chr_arm=set1,cn_seg_id=set2) 
 chr_arms_cn_overlap = chr_arms_cn_overlap %>% 
   left_join(cohort_segments_df %>%   dplyr::mutate(cn_seg_width=end-start) %>%
-              dplyr::select(seqnames,cn_seg_id,basename,copyNumber,minorAlleleCopyNumber,cn_seg_width)) %>%
-  left_join(chr_arms_df %>% dplyr::mutate(chr_arm_width=chr_arm_end-chr_arm_start)%>% dplyr::select(chr_arm,chr_arm_width))
+              dplyr::select(seqnames,cn_seg_id,basename,copyNumber,copyNumberInt,minorAlleleCopyNumber,cn_seg_width,
+                            start,end)) %>%
+  left_join(chr_arms_df %>% dplyr::mutate(chr_arm_width=chr_arm_end-chr_arm_start)%>% dplyr::select(chr_arm,chr_arm_width,chr_arm_start,chr_arm_end))
 
+#todo remove chr_arm_seg_cnt because misleading is LOH seg only
 cn_chr_arm = chr_arms_cn_overlap %>% 
   filter(minorAlleleCopyNumber<=loh_minorCN.max) %>% 
   group_by(basename,chr_arm,chr_arm_width) %>% 
-  summarize(seg_loh = sum(overlap_set2_set1*cn_seg_width)) %>%
+  summarize(seg_loh = sum(overlap_set2_set1*cn_seg_width),
+            chr_arm_seg_cnt = n()) %>%
   dplyr::mutate(chr_arm_frac_loh = seg_loh / chr_arm_width) %>% as.data.frame() %>%
   dplyr::select(-seg_loh,-chr_arm_width)
 
@@ -693,7 +700,8 @@ chromosomes_df$chrom_width=chromosomes_df$end-chromosomes_df$start
 cn_full_chrom = chr_arms_cn_overlap %>% left_join(chromosomes_df %>% select(seqnames,chrom_width)) %>% 
   filter(minorAlleleCopyNumber<=loh_minorCN.max) %>% 
   group_by(basename,seqnames,chrom_width) %>% 
-  summarize(seg_loh = sum(overlap_set2_set1*cn_seg_width)) %>%
+  summarize(seg_loh = sum(overlap_set2_set1*cn_seg_width),
+            chrom_frac_seg_cnt=n()) %>%
   dplyr::mutate(chrom_frac_loh = seg_loh / chrom_width) %>% as.data.frame() %>%
   dplyr::select(-seg_loh,-chrom_width)
 
@@ -702,6 +710,47 @@ cn_chr_arm_amp = chr_arms_cn_overlap %>%
   group_by(basename,chr_arm) %>% 
   summarize(seg_amp9_kbp = sum(overlap_set2_set1*cn_seg_width)/1e3) %>% as.data.frame() 
 
+# per sample, get chr arm frac most common CN integer state, to check for full arm loss and LOH
+#only take part within chr arm region
+chr_arm_cn_states = chr_arms_cn_overlap %>% 
+  filter(copyNumberInt<=8 & copyNumberInt>=0) %>%
+  rowwise() %>% 
+  dplyr::mutate(seg_start=max(chr_arm_start,start),seg_end = min(chr_arm_end,end),seg_width=seg_end-seg_start,
+                sample_chr_arm=paste0(basename,"_",chr_arm)) %>%
+  group_by(basename,chr_arm,seqnames,sample_chr_arm,copyNumberInt,chr_arm_width) %>% summarize(
+    bp=sum(seg_width),.groups = "drop") %>% dplyr::mutate(frac=bp/chr_arm_width) 
+
+select_largest_frac_chr_arm = chr_arm_cn_states[chr_arm_cn_states$frac == ave(chr_arm_cn_states$frac,chr_arm_cn_states$sample_chr_arm,FUN=max),]
+select_largest_frac_chr_arm = select_largest_frac_chr_arm %>% 
+  dplyr::rename(chr_arm_largest_frac_cn_state_int=copyNumberInt,
+                chr_arm_largest_frac_cn_state=frac) %>%
+  dplyr::select(-sample_chr_arm,-chr_arm_width,-bp,-seqnames)
+
+#only take part within chr arm region still needed to prevent frac>1 for segs in both p and q
+chrom_cn_states = chr_arms_cn_overlap %>% 
+  filter(copyNumberInt<=8 & copyNumberInt>=0) %>%
+  left_join(chromosomes_df %>% select(seqnames,chrom_width)) %>% 
+  rowwise() %>% 
+  dplyr::mutate(seg_start=max(chr_arm_start,start),seg_end = min(chr_arm_end,end),seg_width=seg_end-seg_start,
+                sample_chrom=paste0(basename,"_",seqnames)) %>%
+  group_by(basename,seqnames,sample_chrom,copyNumberInt,chrom_width) %>% summarize(
+    bp=sum(seg_width),.groups="drop") %>% dplyr::mutate(frac=bp/chrom_width) 
+
+select_largest_frac_chrom = chrom_cn_states[chrom_cn_states$frac == ave(chrom_cn_states$frac,chrom_cn_states$sample_chrom,FUN=max),]
+select_largest_frac_chrom = select_largest_frac_chrom %>% 
+  dplyr::rename(chrom_largest_frac_cn_state_int=copyNumberInt,
+                chrom_largest_frac_cn_state=frac) %>%
+  dplyr::select(-sample_chrom,-chrom_width,-bp)
+
+
+if(FALSE) {
+  target_sample="gel-100k_215001584-tumour-5_LP3001110-DNA_D10"
+target_sample="gel-100k_215001679-tumour-2_LP3000850-DNA_F01"
+select_largest_frac_chr_arm %>% filter(basename==target_sample & chr_arm=="chr17q")
+select_largest_frac_chrom %>% filter(basename==target_sample & seqnames=="chr17")
+select_largest_frac_chr_arm %>% filter(chr_arm_largest_frac_cn_state>1)
+select_largest_frac_chrom %>% filter(chrom_largest_frac_cn_state>1)
+}
 
 if(exists("gene_sv_bp_max_af")) {
   gene_cn_sv_disruptions = gene_cn %>% ungroup() %>%
@@ -740,12 +789,21 @@ gene_cn_sv_disruptions = gene_cn_sv_disruptions %>%
   
   gene_region_cgr = sample_gene %in% gene_region_cgr_overlap$sample_gene,
  # gene_region_sv_bp = sample_gene %in% filter(gene_region_sv_bp_overlap,PURPLE_JCN>=multiplicity_gene_region_sv.min)$sample_gene,
-  gene_region_ctx = sample_gene %in% filter(gene_region_sv_bp_overlap,svtype=="CTX"&PURPLE_JCN>=multiplicity_gene_region_sv.min)$sample_gene) %>%
+  gene_region_ctx = sample_gene %in% filter(gene_region_sv_bp_overlap,svtype=="CTX"&PURPLE_JCN>=multiplicity_gene_region_sv.min)$sample_gene,
+  gene_region_ctx_notaf = sample_gene %in% filter(gene_region_sv_bp_overlap,svtype=="CTX")$sample_gene) %>%
   left_join(map_genes_chr_arms) %>% 
   left_join(cn_tsg_chr_arm_terminal,by=c("basename", "gene_name", "sample_gene")) %>% 
   left_join(cn_chr_arm,by=c("basename", "chr_arm")) %>%
   left_join(cn_full_chrom,by=c("basename", "seqnames")) %>%
   left_join(cn_chr_arm_amp,by=c("basename", "chr_arm")) %>%
+  left_join(select_largest_frac_chrom,by=c("basename", "seqnames")) %>%
+  left_join(select_largest_frac_chr_arm,by=c("basename", "chr_arm"))
+
+gene_cn_sv_disruptions = gene_cn_sv_disruptions %>%
+  dplyr::mutate(seg_amp9_kbp=ifelse(is.na(seg_amp9_kbp),0,seg_amp9_kbp),
+                chr_arm_largest_frac_cn_state=ifelse(is.na(chr_arm_largest_frac_cn_state),0,chr_arm_largest_frac_cn_state),
+                chrom_largest_frac_cn_state=ifelse(is.na(chrom_largest_frac_cn_state),0,chrom_largest_frac_cn_state)
+  ) %>%
   dplyr::mutate(
     gene_knockout =  hmf_biallelic | (!is.na(hmf_driver) & gene_sv_bp) | gene_sv_bp_biallelic | weighted_CN<=loh_minorCN.max,
     gene_knockout_sv_component = gene_loh & gene_knockout,
@@ -753,11 +811,23 @@ gene_cn_sv_disruptions = gene_cn_sv_disruptions %>%
     gene_knockout_sv_component_strict = ((gene_sv_bp_biallelic) | 
       (gene_knockout & gene_loh & (gene_region_cgr | gene_region_ctx | gene_sv_bp) & chr_arm_frac_loh<=0.75) ),
     
-    gene_knockout_dicentric = ((gene_sv_bp_biallelic | (gene_knockout & gene_loh & (gene_region_cgr | gene_region_ctx | gene_sv_bp) )) & 
+    gene_knockout_dicentric_prev = ((gene_sv_bp_biallelic | (gene_knockout & gene_loh & (gene_region_cgr | gene_region_ctx | gene_sv_bp) )) & 
       chr_arm_frac_loh <= specific_sv_disruption.chr_arm_frac_loh.max &
-      chr_arm_terminal_frac_loh >= specific_sv_disruption.terminal_frac_loh.min)  
+      chr_arm_terminal_frac_loh >= specific_sv_disruption.terminal_frac_loh.min),
+    
+    gene_knockout_dicentric = ((gene_sv_bp_biallelic | (gene_knockout & gene_loh & (gene_region_cgr | gene_region_ctx_notaf | gene_sv_bp) )) &
+                                  (chr_arm_terminal_frac_loh >= 0.75 | seg_amp9_kbp>1e3) &
+                                  (chr_arm_frac_loh <=0.9 | chr_arm_seg_cnt>=25) &
+                                  (chrom_frac_loh <=0.9 | chrom_frac_seg_cnt>=50) ),
+    # seg didnt work as expected
+    gene_knockout_dicentric2 = ((gene_sv_bp_biallelic | (gene_knockout & gene_loh & (gene_region_cgr | gene_region_ctx_notaf | gene_sv_bp) )) & 
+                                 (chr_arm_terminal_frac_loh >= 0.75 | (chr_arm_terminal_frac_loh>=0.33 & seg_amp9_kbp>1e3)) &
+                                 ( ! (chr_arm_frac_loh >0.9 & chr_arm_largest_frac_cn_state>0.9 ) & chr_arm_frac_loh<0.995 ) &
+                                 ( ! (chrom_frac_loh >0.9 & chrom_largest_frac_cn_state >0.9) )
+    
+
     )
-   
+  )
   
 if(!exists("lta_tsg_disruption_lst")) {
   tsg_biallelic_ko_freq = gene_cn_sv_disruptions %>% filter(gene_knockout_sv_component) %>% select(basename,gene_name) %>% unique() %>% group_by(gene_name) %>% count() %>% arrange(-n) 
@@ -814,8 +884,12 @@ instability_region_oncogene_amp_long = instability_region %>% merge(drivers_ampl
 instability_region_oncogene_amp = instability_region_oncogene_amp_long %>% group_by(basename,chr_arm,cluster_id) %>% 
   summarize(onco_gene_amp_lst = toString(unique(paste0(gene_name," (",round(maxCopyNumber,2),") "))))
 
+cgr_multichrom_oncogene_amp = instability_region_oncogene_amp_long %>% group_by(basename,chrom_all) %>% 
+  summarize(cgr_multichrom_onco_gene_amp_lst = toString(unique(paste0(gene_name," (",round(maxCopyNumber,2),") "))))
 
-instability_region = instability_region %>% left_join(instability_region_oncogene_amp) %>% mutate(onco_amp_in_chr_arm = !is.na(onco_gene_amp_lst))
+instability_region = instability_region %>% left_join(instability_region_oncogene_amp) %>% left_join(cgr_multichrom_oncogene_amp) %>% 
+  mutate(onco_amp_in_chr_arm = !is.na(onco_gene_amp_lst),
+         onco_amp_in_cgr_multichrom = !is.na(cgr_multichrom_onco_gene_amp_lst))
 
 
 # Connections: Link tsg region to onco region ----
@@ -891,11 +965,11 @@ selected_connected_tsg_regions = svs_connecting_tsg_instability %>%
   summarize(connecting_svs = length(unique(sv_id)),
             ctx_max_tumor_af = max(purple_af_start,na.rm = T),
             ctx_max_multiplicity = max(PURPLE_JCN,na.rm = T),.groups = "drop") %>% 
-  left_join(instability_region %>% select(region_id,chrom_all,classification,cluster_id,multichromosomal,onco_amp_in_chr_arm,onco_gene_amp_lst,chrom) ) %>%
+  left_join(instability_region %>% select(region_id,chrom_all,classification,cluster_id,multichromosomal,onco_amp_in_chr_arm,onco_gene_amp_lst,onco_amp_in_cgr_multichrom,cgr_multichrom_onco_gene_amp_lst,chrom) ) %>%
   dplyr::rename_with(.fn=function(x){paste0("cgr_",x)},.cols=c("multichromosomal","chrom_all","classification")) %>%
   left_join(tsg_region %>% dplyr::mutate(chrom=seqnames) %>%
               select(region_id,chrom,gene_name,weighted_CN,weighted_minorCN,max_tumor_af,max_multiplicity,contains("hmf"),
-                     gene_loh,gene_sv_bp_biallelic,gene_region_cgr,gene_region_ctx,gene_sv_bp,gene_knockout_dicentric,gene_knockout_sv_component,gene_knockout_sv_component_strict) %>% unique() %>%
+                     gene_loh,gene_sv_bp_biallelic,gene_region_cgr,gene_region_ctx,gene_region_ctx_notaf,gene_sv_bp,gene_knockout_dicentric,gene_knockout_dicentric_prev,gene_knockout_dicentric2,gene_knockout_sv_component,gene_knockout_sv_component_strict) %>% unique() %>%
               dplyr::rename_with(.fn=function(x){paste0("tsg_",x)}),
             by=c("tsg_region_id"))  %>%
   as.data.frame()
@@ -932,7 +1006,7 @@ count_connected_tsg_regions = selected_connected_tsg_regions %>% group_by(basena
   summarize(instability_region_cnt = length(unique(cluster_id)),instability_region_chrom_cnt = length(unique(chrom)))
 
 selected_connected_tsg_regions = selected_connected_tsg_regions %>% left_join(count_connected_tsg_regions) %>% mutate(tsg_to_multiple_chrom=ifelse(!is.na(instability_region_chrom_cnt),instability_region_chrom_cnt>1,F))
-selected_connected_tsg_regions %>% filter(basename=="gel-100k_215000400-tumour-1_LP3000428-DNA_A01")
+#selected_connected_tsg_regions %>% filter(basename=="gel-100k_215000400-tumour-1_LP3000428-DNA_A01")
 
 
 if(FALSE) {
@@ -976,6 +1050,11 @@ if(FALSE){
     )
 }
 
+#extend to amp in other cgr arms for multichromosomal ltas 
+#onco_amp_in_cgr_multichrom includes direct onco_amp_in_chr_arm
+#kept meaning of lta_onco and lta_multichrom the same for legacy purposes
+
+
 gene_cn_sv_disruptions.call_lta = gene_cn_sv_disruptions %>% 
   dplyr::mutate(tsg_chrom=seqnames,tsg_gene_name=gene_name) %>% 
   select(basename,tsg_gene_name,tsg_chrom) %>% 
@@ -987,7 +1066,12 @@ gene_cn_sv_disruptions.call_lta = gene_cn_sv_disruptions %>%
     lta_multichrom =  any( ((!is.na(tsg_to_multiple_chrom) & tsg_to_multiple_chrom) | (!is.na(cgr_multichromosomal_excl_tsg_region) & cgr_multichromosomal_excl_tsg_region) ) &
                              !is.na(tsg_gene_knockout_sv_component) & tsg_gene_knockout_sv_component),
     lta_onco =  any(!is.na(onco_amp_in_chr_arm) & onco_amp_in_chr_arm & !is.na(tsg_gene_knockout_sv_component) & tsg_gene_knockout_sv_component),
+    lta_onco_direct =  lta_onco,
+    lta_onco_incl_indirect =  any(!is.na(onco_amp_in_cgr_multichrom) & onco_amp_in_cgr_multichrom & !is.na(tsg_gene_knockout_sv_component) & tsg_gene_knockout_sv_component),
     lta_onco_multichrom =  any( !is.na(onco_amp_in_chr_arm) & onco_amp_in_chr_arm &  
+                                  ((!is.na(tsg_to_multiple_chrom) & tsg_to_multiple_chrom) | (!is.na(cgr_multichromosomal_excl_tsg_region) & cgr_multichromosomal_excl_tsg_region) ) &
+                                  !is.na(tsg_gene_knockout_sv_component) & tsg_gene_knockout_sv_component),
+    lta_onco_multichrom_incl_indirect =  any( !is.na(onco_amp_in_cgr_multichrom) & onco_amp_in_cgr_multichrom &  
                                   ((!is.na(tsg_to_multiple_chrom) & tsg_to_multiple_chrom) | (!is.na(cgr_multichromosomal_excl_tsg_region) & cgr_multichromosomal_excl_tsg_region) ) &
                                   !is.na(tsg_gene_knockout_sv_component) & tsg_gene_knockout_sv_component),
     .groups="drop"
@@ -996,10 +1080,10 @@ gene_cn_sv_disruptions.call_lta = gene_cn_sv_disruptions %>%
 #knockout of gene regardless of lta
 gene_cn_sv_disruptions.call_lta = gene_cn_sv_disruptions.call_lta %>% 
   left_join(gene_cn_sv_disruptions %>% select(basename,gene_name,weighted_CN,weighted_minorCN,max_tumor_af,max_multiplicity,contains("hmf"),
-                                              gene_loh,gene_sv_bp_biallelic,gene_region_cgr,gene_region_ctx,gene_sv_bp,
-                                              chr_arm_terminal_frac_loh,chr_arm_frac_loh,chrom_frac_loh,seg_amp9_kbp,gene_knockout,
-                                              gene_knockout_sv_component,gene_knockout_sv_component_strict,
-                                              gene_knockout_dicentric) %>% unique() %>%
+                                              gene_loh,gene_sv_bp_biallelic,gene_region_cgr,gene_region_ctx,gene_region_ctx_notaf,gene_sv_bp,
+                                              chr_arm_terminal_frac_loh,chr_arm_frac_loh,chrom_frac_loh,seg_amp9_kbp,chr_arm_largest_frac_cn_state,chrom_largest_frac_cn_state,
+                                              gene_knockout,gene_knockout_sv_component,gene_knockout_sv_component_strict,
+                                              gene_knockout_dicentric,gene_knockout_dicentric_prev,gene_knockout_dicentric2) %>% unique() %>%
               dplyr::rename_with(.cols=-basename,.fn=function(x){paste0("tsg_",x)}) )
 
 gene_cn_sv_disruptions.call_lta = gene_cn_sv_disruptions.call_lta %>% dplyr::mutate(connected_to_tp53_tsg_region = 
@@ -1016,18 +1100,25 @@ cohort_call_lta = cohort  %>%
 cohort_call_lta = cohort_call_lta %>% mutate( across(.cols=c(contains("knockout"),contains("lta")), ~replace_na(.x, F)) )
 
 
-#knockout here is part of lta 
+selected_connected_tsg_regions_annot = selected_connected_tsg_regions %>% left_join(gene_cn_sv_disruptions.call_lta %>% select(basename,tsg_region_id,contains("lta"),connected_to_tp53_tsg_region))
+
+
 oncogene_amp_annot = drivers_amplified %>% 
   left_join(instability_region_oncogene_amp_long %>% select(basename,chr_arm,gene_name,cluster_id,region_id),by=c("basename", "gene_name", "chr_arm")) %>%
-   left_join(selected_connected_tsg_regions %>% 
-               select(region_id,cgr_chrom_all,cgr_classification,tsg_region_id,tsg_gene_name,tsg_chr_arm,tsg_gene_knockout_sv_component,tsg_gene_knockout_sv_component_strict,tsg_gene_knockout_dicentric,tsg_to_multiple_chrom,cgr_multichromosomal_excl_tsg_region),relationship = "many-to-many") %>%
-   left_join(gene_cn_sv_disruptions.call_lta %>% select(basename,tsg_gene_name,contains("lta"),connected_to_tp53_tsg_region),by=c("basename","tsg_gene_name"))
+  left_join(selected_connected_tsg_regions_annot %>%
+              select(region_id,cgr_chrom_all,cgr_classification,tsg_region_id,tsg_gene_name,tsg_chr_arm,tsg_gene_knockout_sv_component,
+                     tsg_gene_knockout_sv_component_strict,tsg_gene_knockout_dicentric,tsg_gene_knockout_dicentric_prev,tsg_gene_knockout_dicentric2,tsg_to_multiple_chrom,cgr_multichromosomal_excl_tsg_region,
+                     contains("lta"),connected_to_tp53_tsg_region),relationship = "many-to-many")
+#should add indirect amp here too but is tricky 
+#selected_connected_tsg_regions_annot %>% filter(tsg_gene_name=="TP53") %>% filter(basename %in% filter(cohort_call_lta,tsg_gene_name=="TP53" & lta_onco_multichrom & !lta_onco_direct)$basename) %>% select(basename,cgr_chrom_all) %>% unique()
+
+# oncogene_amp_annot %>% filter(basename %in% filter(cohort_call_lta,tsg_gene_name=="TP53" & lta_onco_multichrom & !lta_onco_direct)$basename) %>%
+#   select(gene_name,cgr_chrom_all,chrom_all,lta_onco_multichrom)
 
 oncogene_amp_annot = oncogene_amp_annot %>% mutate(
   across(.cols=c(contains("knockout"),contains("lta"),connected_to_tp53_tsg_region), ~replace_na(.x, F))
 )
 
-selected_connected_tsg_regions_annot = selected_connected_tsg_regions %>% left_join(gene_cn_sv_disruptions.call_lta %>% select(basename,tsg_region_id,contains("lta"),connected_to_tp53_tsg_region))
 
 #look at instability regions connected to multiple tsg disrupted regions indicating same event
 #selected_connected_tsg_regions_annot %>% filter(lta) %>% group_by(region_id) %>% summarize(toString(unique(tsg_region_id)))
@@ -1056,15 +1147,14 @@ library(ReConPlot)
 
 if(dataset_selection_label=="osteos") {
   plot_cases = call_lta_annot %>% filter(lta_any)
-#  plot_cases = call_lta_annot %>% filter(lta&tsg_gene_knockout_dicentric==F & tsg_gene_name=="TP53")
+  plot_cases = call_lta_annot %>% filter(lta)
   
 } else {
   #plot_cases = call_lta_annot %>% filter(lta_onco)
   plot_cases = call_lta_annot %>% filter(lta_onco_multichrom)
 }
 
-plot_cases = plot_cases %>% arrange(-tsg_gene_knockout_dicentric) 
-plot_cases = plot_cases %>% arrange(-lta_onco_multichrom) 
+plot_cases = plot_cases  %>% arrange(desc(tsg_gene_name)) %>% arrange(-tsg_gene_knockout_dicentric,-lta_onco)
 #highest prio for plotting
 #plot_cases = call_lta_annot %>% filter(lta&tsg_gene_name!="TP53"&tsg_gene_knockout_sv_component_strict==T&connected_to_tp53_tsg_region==F)
 
@@ -1074,6 +1164,7 @@ plot_cases = plot_cases %>% arrange(-lta_onco_multichrom)
 target_tsg_region_id="gel-100k_215000400-tumour-1_LP3000428-DNA_A01_LSAMP"
 #target_tsg_region_id="gel-100k_215000612-tumour-1_LP3000296-DNA_E12_CDKN2A"
 target_tsg_region_id="pcawg_DO52642_f83fc777-5416-c3e9-e040-11ac0d482c8e_TP53"
+target_tsg_region_id="gel-100k_215001679-tumour-2_LP3000850-DNA_F01_TP53"
 for(target_tsg_region_id in plot_cases$tsg_region_id) {
   sample=filter(call_lta_annot,tsg_region_id==target_tsg_region_id)
   target_sample=sample$basename
@@ -1211,7 +1302,31 @@ sv_data = svs_df %>%
   
   if(full_chrom %>% filter(!chr %in% plot_region_instability_only$chr) %>% nrow() == 0 ) {next()}
   if(nrow(sv_data_instability_only) > max_svs_display) {
-    print(paste0("Too many SVs to display, skipping full plot", nrow(sv_data)))
+    print(paste0("Too many SVs to display, skipping instability only plot", nrow(sv_data_instability_only)))
+    print("Last resort: only TSG arm")
+    plot_tsg_region_only = c(plot_selected_connecting_svs$tsg_chr_arm) %>% unique()
+    
+    plot_tsg_region_only = chr_arms_df %>%
+      filter(chr_arm %in% plot_tsg_region_only) %>% arrange(seqnames) %>%
+      select(seqnames,start,end) %>% dplyr::mutate(chr1=as.character(seqnames),chr=chr1,start=1,end=500e6) %>% as.data.frame() %>% unique()
+    sv_data_tsg_region_only = sv_data %>% filter(chr1 %in% plot_tsg_region_only$seqnames)
+    
+    if(nrow(sv_data_tsg_region_only) <= max_svs_display) {
+      print(paste0("Last resort: only TSG arm"))
+      
+    p = ReConPlot(genes = plot_gene_lst,
+                  sv_data_tsg_region_only,
+                  cn_data %>% filter(chr %in% plot_tsg_region_only$seqnames),
+                  chr_selection=plot_tsg_region_only,
+                  legend_SV_types=T,
+                  pos_SVtype_description=1000000,
+                  scale_separation_SV_type_labels=1/23,
+                  title=paste0(multichrom_group," ",target_sample," - plot tsg region only"),
+                  max.cn = 12,
+                  label_interchr_SV = TRUE,
+    )
+    print(p)
+    }
   } else {
   p = ReConPlot(genes = plot_gene_lst,
                 sv_data_instability_only,
@@ -1225,6 +1340,24 @@ sv_data = svs_df %>%
                 label_interchr_SV = TRUE,
   )
   print(p)
+  }
+  
+  if(full_chrom %>% filter(!chr %in% plot_region_instability_only$chr) %>% nrow() == 0 ) {next()}
+  if(nrow(sv_data_instability_only) > max_svs_display) {
+    print(paste0("Too many SVs to display, skipping instability only plot", nrow(sv_data)))
+  } else {
+    p = ReConPlot(genes = plot_gene_lst,
+                  sv_data_instability_only,
+                  cn_data %>% filter(chr %in% plot_region_instability_only$seqnames),
+                  chr_selection=plot_region_instability_only,
+                  legend_SV_types=T,
+                  pos_SVtype_description=1000000,
+                  scale_separation_SV_type_labels=1/23,
+                  title=paste0(multichrom_group," ",target_sample," - plot chrom instability only"),
+                  max.cn = 12,
+                  label_interchr_SV = TRUE,
+    )
+    print(p)
   }
 }
 
