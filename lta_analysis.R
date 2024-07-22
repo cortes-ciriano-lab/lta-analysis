@@ -217,6 +217,8 @@ amp_samples_overall = amp_samples
 tcga_cohort_size = tcga_cohort_call_lta %>% filter(sample_analysed) %>% group_by(cohort_id) %>% summarize(Cohort_Size=n(),sample_cnt=Cohort_Size)
 cohort_order=c("osteos",tcga_cohort_size %>% arrange(-Cohort_Size) %>% dplyr::select(cohort_id) %>% flatten_chr()) %>% unique()
 
+label_order=c("Amp_LTA","Amp_LTA-multi","Amp_LTA-single","Amp_CGR","Amp_Other")
+label_colors=c("Amp_LTA"="purple3","Amp_LTA-multi"="purple3","Amp_LTA-single"="hotpink","Amp_CGR"="darkolivegreen3","Amp_Other"="skyblue2")
 
 pdf(paste0(plot_dir,"LTA_oncogene_amp.pdf"),height=12,width=10)
 
@@ -256,8 +258,6 @@ amp_samples_single_tsg = amp_samples_single_tsg %>% dplyr::mutate(
 if(target_tsg=="TP53") {
   amp_samples_tp53=amp_samples_single_tsg
 }
-label_order=c("Amp_LTA","Amp_LTA-multi","Amp_LTA-single","Amp_CGR","Amp_Other")
-label_colors=c("Amp_LTA"="purple3","Amp_LTA-multi"="purple3","Amp_LTA-single"="hotpink","Amp_CGR"="darkolivegreen3","Amp_Other"="skyblue2")
 
 p = ggplot(amp_samples_single_tsg) + 
   geom_col(data=tcga_cohort_size,aes(y=factor(cohort_id,levels=rev(cohort_order)),x=sample_cnt), fill="grey",alpha=0.5,color="black", linewidth=.1) +
@@ -320,6 +320,9 @@ tsg_per_ct_tp53 =  tsg_disruption_samples_tp53 %>% group_by(cohort_id) %>% summa
                                                                            LTA_multi=sum(lta_multichrom_dicentric))
 
 
+amp_per_ct =  amp_samples %>% group_by(cohort_id) %>% summarize(OncoAmp=length(unique(basename)), #should be identical to n(),
+                                                                          OncoAmp_LTA=sum(lta_onco_dicentric,na.rm = T),
+                                                                          OncoAmp_LTA_multi=sum(lta_onco_multichrom_dicentric,na.rm = T))
 
 
 amp_per_ct_tp53 =  amp_samples_tp53 %>% group_by(cohort_id) %>% summarize(OncoAmp=length(unique(basename)), #should be identical to n(),
@@ -342,7 +345,7 @@ prevalence_label_colors=c("Cohort_Size"="grey","LTA"="purple3","OncoAmp"="red3",
 pdf(paste0(plot_dir,"LTA_prevalence_breakdown.pdf"),height=20,width=10)
 #pdf(paste0(plot_dir,"LTA_prevalence_breakdown.pdf"),height=25,width=10)
 
-ggplot(lta_prevalence_tp53 %>% 
+p = ggplot(lta_prevalence_tp53 %>% 
          select(-contains("multi"),-TSG_koSV) %>%
          pivot_longer(-cohort_id,values_to = "cnt",names_to="attr") %>%
          dplyr::mutate(attr = factor(attr,levels=names(prevalence_label_colors)))
@@ -352,9 +355,9 @@ ggplot(lta_prevalence_tp53 %>%
   theme_bw() + ylab("") + xlab("# samples") +
   scale_fill_manual(values=prevalence_label_colors) +
   ggtitle("LTA prevalence - events disrupting TP53")
+print(p)
 
-
-ggplot(lta_prevalence %>% 
+p = ggplot(lta_prevalence %>% 
          select(-contains("multi"),-TSG_koSV) %>%
          pivot_longer(-cohort_id,values_to = "cnt",names_to="attr") %>%
          dplyr::mutate(attr = factor(attr,levels=names(prevalence_label_colors)))
@@ -364,6 +367,7 @@ ggplot(lta_prevalence %>%
   theme_bw() + ylab("") + xlab("# samples") +
   scale_fill_manual(values=prevalence_label_colors) +
   ggtitle("LTA prevalence - events disrupting any TSG")
+print(p)
 
 dev.off()
 
