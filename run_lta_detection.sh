@@ -3,7 +3,7 @@
 singularity_img="/nfs/research/icortes/belzen/src/structural_variation_202405_amd.sif"
 singularity_bind_dir="/nfs/research/icortes/"
 script_dir="/nfs/research/icortes/belzen/src/"
-script="/nfs/research/icortes/belzen/src/lta_detection.multi_tsg.R"
+script="/nfs/research/icortes/belzen/src/lta_detection.R"
 resources="--mem=150Gb --time=35:00:00"
 
 #run_pattern="TCGA-PRAD_*"

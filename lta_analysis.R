@@ -121,8 +121,13 @@ tcga_gene_cn_sv_disruptions = rbind_no_colmatch(tcga_gene_cn_sv_disruptions,gene
 #Quantification ----
 
 #remove non hgos
+if("subtype_short" %in% names(tcga_cohort_call_lta)) {
 tcga_cohort_call_lta = tcga_cohort_call_lta %>% filter(subtype_short=="HGOS"|is.na(subtype_short))
 #ostoes is 49 of manual set and 8 additional cases
+} else {
+  tcga_cohort_call_lta$subtype_short=NA
+  
+}
 
 #cohort overview, dicentric LTA per gene
 tcga_gene_cn_sv_disruptions %>%  
@@ -486,7 +491,6 @@ lta_prevalence_tp53_export = lta_prevalence_tp53_export %>% mutate(LTA_frac = LT
 lta_prevalence_tp53_export[is.na(lta_prevalence_tp53_export)]=0
 
 print(lta_prevalence_tp53_export)
-print(lta_prevalence_tp53_export %>% filter(Cohort_Size > 100))
 print(lta_prevalence_tp53_export %>% filter(cohort_id=="TCGA_overall"))
 
 print("other TSG with LTA, excluding tumors with TP53 LTA")
@@ -501,7 +505,6 @@ lta_prevalence_no_tp53_export = lta_prevalence_no_tp53_export %>% mutate(LTA_fra
 
 lta_prevalence_no_tp53_export[is.na(lta_prevalence_no_tp53_export)]=0
 print(lta_prevalence_no_tp53_export)
-print(lta_prevalence_no_tp53_export %>% filter(Cohort_Size > 100))
 
 print(lta_prevalence_no_tp53_export %>% filter(cohort_id=="TCGA_overall"))
 

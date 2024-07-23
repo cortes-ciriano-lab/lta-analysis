@@ -20,7 +20,7 @@ To sum up, we used the following criteria to detect LTA:
 
 * Biallelic _TP53_ disruption. 
 * Connections between chromosome 17p and other chromosome arms with CGRs.
-* Presence of an SV in the _TP53_ gene body, or a CTX breakpoint or a CGR in the region between start of _TP53_ and the centromere.
+* Presence of an SV in the _TP53_ gene body, or a translocation breakpoint or a CGR in the region between start of _TP53_ and the centromere.
 * Loss of the 17p terminal segment harbouring _TP53_: a  LOH in the 17p terminal segment, minimum of 75% LOH in the genomic region from the start of the chromosome up to and including _TP53_. 
    * Alternatively: LOH in >33% of the terminal segment of 17p together with an amplification (minimum 1kbp of 9 copies or more)
 * Absence of full chromosome LOH and chromosome arm LOH
@@ -31,7 +31,7 @@ This filtering removes cases where the gene is knocked-out by a simple SV in a c
 
 In 49 of 68 manually identified cases in HGOS, we also computationally verified LTA events with evidence of dicentric chromosome formation, which we termed as high-confidence LTA events.
 
-For the 19 cases that did not pass these filters, this was often due to missing SVs leading to insufficient evidence for _TP53_ knockout by an SV and absence of a CTX or CGR in 17p. Alternatively, some cases fell below the detection limit for 17p LOH of the terminal segment or instead had full 17p LOH often with additional rearrangements leading to breakpoints on 17q. Finally, for a few tumours we did observe full chr17 LOH but these were rare occurrences. These extra cases were labelled as low-confidence LTA-cases as were detected only through manual analysis.
+For the 19 cases that did not pass these filters, this was often due to missing SVs leading to insufficient evidence for _TP53_ knockout by an SV and absence of an translocation breakpoint or CGR in 17p. Alternatively, some cases fell below the detection limit for 17p LOH of the terminal segment or instead had full 17p LOH often with additional rearrangements leading to breakpoints on 17q. Finally, for a few tumours we did observe full chr17 LOH but these were rare occurrences. These extra cases were labelled as low-confidence LTA-cases as were detected only through manual analysis.
 
 ## Contribution of LTA to oncogene amplification in the TCGA dataset 
 
@@ -58,7 +58,7 @@ Please specify paths in the cohort file `lta_detection.conf`
 Optional arguments: `show_plots=FALSE` to skip recon plots; `dataset_selection_label='TCGA-SARC'` to subset the cohort file and `lta_tsg_disruption_lst=c("_TP53_")` to limit analysis to specified TSGs. 
 
 `SINGULARITYENV_R_MAX_VSIZE=150Gb
-singularity exec --bind /path/to/input/ /path/to/script/structural_variation_202405_amd.sif R -e "source('/path/to/script/lta_detection.conf ');show_plots=T;dataset_selection_label='TCGA-SARC';source('/path/to/script/lta_detection.multi_tsg.R')"`
+singularity exec --bind /path/to/input/ /path/to/script/structural_variation_202405_amd.sif R -e "source('/path/to/script/lta_detection.conf ');show_plots=T;dataset_selection_label='TCGA-SARC';source('/path/to/script/lta_detection.R')"`
 
 Plots and tables
 
