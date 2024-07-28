@@ -1,0 +1,13 @@
+latest version 
+20240725: TCGA datafreeze 2024-06-17 removing fail and incomplete resulting in 5239 tumors
+previous versions more filtered subset PASS and removing incomplelte resulting in 4851 tumors
+
+in masterbranch lta_detection.R is the clean version from dev 
+
+output in clean dir was to test script after removal of code
+equivalent working of lta_detection.R and lta_detection.clean.R
+
+
+changelog
+20240723 stable version dicentric - havent updated algorithm since 
+

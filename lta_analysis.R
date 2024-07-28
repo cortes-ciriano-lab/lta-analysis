@@ -36,7 +36,7 @@ rbind_no_colmatch = function (df1,df2)  {
 #read lta_detection.conf 
 if(!exists("results_dir")) {
   tcga_cohort_path="~/data/metadata/TCGA.data_freeze_20240617.purity_table.tsv"
-  results_dir="/Users/belzen//results/LTA-analysis/multi_tsg/"
+  results_dir="/Users/belzen//results/LTA-analysis/clean/"
   plot_dir=paste0(results_dir,"plots/")
   #results_dir="/nfs/research/icortes/belzen/results/lta_detection/multi_tsg/"
 }
@@ -62,14 +62,12 @@ tcga_cohort=read.table(tcga_cohort_path,header = T)
 tcga_cohort$basename=tcga_cohort$sample_id
 tcga_cohort = tcga_cohort %>% rowwise() %>% mutate(cohort_id=unlist(strsplit(sample_id, "_"))[1])
 
-tcga_cohort = tcga_cohort %>% filter(qc=="PASS" )
-tcga_cohort = tcga_cohort %>% filter(!((snv_n_chromosomes <= 15 | sv_n_chromosomes <= 15) & (snv_n < 100 & sv_n < 10)))
+#tcga_cohort = tcga_cohort %>% filter(qc=="PASS" )
+#tcga_cohort = tcga_cohort %>% filter(!((snv_n_chromosomes <= 15 | sv_n_chromosomes <= 15) & (snv_n < 100 & sv_n < 10)))
+tcga_cohort = tcga_cohort %>% filter(qc_simplified != "FAIL" & qc_simplified != "INCOMPLETE")
 tcga_cohort %>% nrow()
 
-cohort_lst = c("osteos","TCGA-SARC","TCGA-OV","TCGA-GBM")
-cohort_lst = c(unique(tcga_cohort$cohort_id))
 cohort_lst = c(unique(tcga_cohort$cohort_id),"osteos")
-dataset_selection_label="TCGA-BRCA"
 
 tcga_cohort_call_lta = data.frame()
 tcga_call_lta_annot = data.frame()
@@ -190,7 +188,7 @@ tcga_oncogene_amp_annot = tcga_oncogene_amp_annot %>%
   dplyr::mutate(sample_has_tp53_lta = basename %in% filter(tcga_cohort_call_lta,lta)$basename)
 
 tsg_with_onco_amp_lta_no_tp53_breakdown = tcga_oncogene_amp_annot  %>% 
-  #  filter(basename %in% filter(tcga_cohort_call_lta,subtype_short=="HGOS")$basename) %>% #check OS first
+#    filter(basename %in% filter(tcga_cohort_call_lta,subtype_short=="HGOS")$basename) %>% #check OS first
   filter(sample_has_tp53_lta==F) %>% #cohort call only contains TP53 LTAs
   filter(lta & tsg_gene_knockout_dicentric) %>% 
   group_by(tsg_gene_name) %>% summarize(sample_cnt=length(unique(basename))) %>% arrange(-sample_cnt)
@@ -229,9 +227,12 @@ amp_samples = amp_samples %>% dplyr::mutate(label = ifelse(lta_onco_multichrom_d
 amp_samples_overall = amp_samples
 
 ## Plot oncogene amplifications with LTA component -----
-#tcga_cohort_size = tcga_cohort %>% group_by(cohort_id) %>% summarize(Cohort_Size=n())
-#analysed samples:
-tcga_cohort_size = tcga_cohort_call_lta %>% filter(sample_analysed) %>% group_by(cohort_id) %>% summarize(Cohort_Size=n(),sample_cnt=Cohort_Size)
+tcga_cohort_size = tcga_cohort %>% group_by(cohort_id) %>% summarize(Cohort_Size=n())
+osteos_cohort_size = tcga_cohort_call_lta %>% filter(cohort_id=="osteos" & subtype_short=="HGOS") %>% group_by(cohort_id) %>% summarize(Cohort_Size=n())
+tcga_cohort_size = rbind(tcga_cohort_size,osteos_cohort_size)
+tcga_cohort_size$sample_cnt = tcga_cohort_size$Cohort_Size
+#analysed samples only
+#tcga_cohort_size = tcga_cohort_call_lta %>% filter(sample_analysed) %>% group_by(cohort_id) %>% summarize(Cohort_Size=n(),sample_cnt=Cohort_Size)
 cohort_order=c("osteos",tcga_cohort_size %>% arrange(-Cohort_Size) %>% dplyr::select(cohort_id) %>% flatten_chr()) %>% unique()
 
 label_order=c("Amp_LTA","Amp_LTA-multi","Amp_LTA-single","Amp_CGR","Amp_Other")
@@ -507,6 +508,28 @@ lta_prevalence_no_tp53_export[is.na(lta_prevalence_no_tp53_export)]=0
 print(lta_prevalence_no_tp53_export)
 
 print(lta_prevalence_no_tp53_export %>% filter(cohort_id=="TCGA_overall"))
+print(lta_prevalence_no_tp53_export %>% filter(cohort_id=="osteos"))
+
+print("Most commonly affected genes in TCGA cohort outside of TP53, also leading to oncogene amp ")
+tcga_tsg_with_onco_amp_lta_no_tp53_breakdown = tcga_oncogene_amp_annot  %>% 
+      filter(!basename %in% filter(tcga_cohort_call_lta,subtype_short=="HGOS")$basename) %>% #check OS first
+  filter(sample_has_tp53_lta==F) %>% #cohort call only contains TP53 LTAs
+  filter(lta & tsg_gene_knockout_dicentric) %>% 
+  group_by(tsg_gene_name) %>% summarize(sample_cnt=length(unique(basename))) %>% arrange(-sample_cnt)
+
+print(tcga_tsg_with_onco_amp_lta_no_tp53_breakdown)
+
+
+tcga_tsg_lta_no_tp53_breakdown = tcga_gene_cn_sv_disruptions %>% 
+  filter(!basename %in% filter(tcga_cohort_call_lta,subtype_short=="HGOS")$basename) %>% #check OS first
+  filter(sample_has_tp53_lta==F) %>% #cohort call only contains TP53 LTAs
+  filter(lta & tsg_gene_knockout_dicentric) %>% 
+  #group_by(cohort_id,tsg_gene_name) %>% summarize(sample_cnt=length(unique(basename))) %>% arrange(-sample_cnt)
+  group_by(tsg_gene_name) %>% summarize(sample_cnt=length(unique(basename))) %>% arrange(-sample_cnt)
+  
+#not necessarily related to amplifications: 
+#print(tcga_tsg_lta_no_tp53_breakdown)
+
 
 
 print("any type of LTA ")
@@ -528,3 +551,27 @@ write.table(lta_prevalence_export,paste0(plot_dir,"LTA_prevalence.any_tsgs.tsv")
 write.table(lta_prevalence_no_tp53_export, paste0(plot_dir,"LTA_prevalence.no_tp53.tsv"),sep="\t",row.names = F,col.names = T)
 write.table(lta_prevalence_tp53_export, paste0(plot_dir,"LTA_prevalence.tp53.tsv"),sep="\t",row.names = F,col.names = T)
 
+write_tsv(amp_samples, paste0(plot_dir,"amp_samples_all.tsv"))
+write_tsv(amp_samples_tp53, paste0(plot_dir,"amp_samples_TP53.tsv"))
+write_tsv(amp_samples_no_tp53, paste0(plot_dir,"amp_samples_noTP53.tsv"))
+
+write_tsv(tcga_cohort_size, paste0(plot_dir,"tcga_cohort_size.tsv"))
+
+amp_samples_no_tp53_genes = tcga_oncogene_amp_annot %>% 
+  filter(tsg_gene_name!="TP53" & sample_has_tp53_lta==F) %>%
+  filter(lta_dicentric) %>%
+  group_by(cohort_id,basename) %>% 
+  summarize(tsg_lst = toString(unique(sort(tsg_gene_name))),
+            onco_lst = toString(unique(sort(paste0(tsg_gene_name,"->",gene_name)))))
+
+write_tsv(amp_samples_no_tp53_genes, paste0(plot_dir,"amp_samples_noTP53.genes.tsv"))
+
+
+amp_samples_tp53_genes = tcga_oncogene_amp_annot %>% 
+  filter(tsg_gene_name=="TP53") %>%
+  filter(lta_dicentric) %>%
+  group_by(cohort_id,basename) %>% 
+  summarize(tsg_lst = toString(unique(sort(tsg_gene_name))),
+            onco_lst = toString(unique(sort(gene_name))))
+
+write_tsv(amp_samples_tp53_genes, paste0(plot_dir,"amp_samples_TP53.tsv"))

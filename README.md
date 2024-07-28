@@ -21,8 +21,9 @@ To sum up, we used the following criteria to detect LTA:
 * Biallelic _TP53_ disruption. 
 * Connections between chromosome 17p and other chromosome arms with CGRs.
 * Presence of an SV in the _TP53_ gene body, or a translocation breakpoint or a CGR in the region between start of _TP53_ and the centromere.
-* Loss of the 17p terminal segment harbouring _TP53_: a  LOH in the 17p terminal segment, minimum of 75% LOH in the genomic region from the start of the chromosome up to and including _TP53_. 
-   * Alternatively: LOH in >33% of the terminal segment of 17p together with an amplification (minimum 1kbp of 9 copies or more)
+* Loss of the 17p terminal segment, defined as the genomic region from the start of the chromosome up to and including _TP53_: 
+   * minimum of 75% LOH
+   * Alternatively: minimum 33% LOH together with an amplification (minimum 1kbp of 9 copies or more)
 * Absence of full chromosome LOH and chromosome arm LOH
    * Removing cases where the chromosome (arm) shows extensive LOH (>90%) and exists in a single copy number state (>90%). This removes aneuploidies but does not discard extensive LOH due to rearrangements.
    * Removing all cases with full chromosome arm LOH (>99.5%)
