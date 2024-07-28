@@ -357,8 +357,9 @@ cohort=read.table(cohort_path,header = T)
 cohort$basename=cohort$sample_id
 cohort = cohort %>% rowwise() %>% mutate(cohort_id=unlist(strsplit(sample_id, "_"))[1])
 
-cohort = cohort %>% filter(qc=="PASS" )
-cohort = cohort %>% filter(!((snv_n_chromosomes <= 15 | sv_n_chromosomes <= 15) & (snv_n < 100 & sv_n < 10)))
+# cohort = cohort %>% filter(qc=="PASS" )
+# cohort = cohort %>% filter(!((snv_n_chromosomes <= 15 | sv_n_chromosomes <= 15) & (snv_n < 100 & sv_n < 10)))
+cohort = cohort %>% filter(qc_simplified != "FAIL" & qc_simplified != "INCOMPLETE")
 
 if(flag_run_single_sample==F & exists("dataset_selection_label")) {
   cohort = cohort %>% filter(cohort_id==dataset_selection_label)
